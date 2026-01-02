@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import csv
 import os
 import sys
 
@@ -47,6 +48,8 @@ def main():
     # filenames = fs.glob('ei_snc_data/data/STARLINK_30254/03/*/??/0-??????0-0-image.rawl*')
     filenames = fs.glob(args.filename_pattern)
 
+    table_rows = []
+
     for filename in filenames:
         if args.dry_run:
             print(filename)
@@ -54,12 +57,16 @@ def main():
 
         try:
             percentiles = process_file(filename, fs)
-            print(filename)
-            print(percentiles)
-            print()
+            table_rows.append([filename] + list(percentiles))
+            print([filename] + list(percentiles))
 
         except Exception as e:
             print(f"Error processing {filename}: {e}")
+
+    with open(args.output, 'w', newline='') as csvfile:
+        csvwriter = csv.writer(csvfile)
+        for row in table_rows:
+            csvwriter.writerow(row)
 
 
 if __name__ == "__main__":
