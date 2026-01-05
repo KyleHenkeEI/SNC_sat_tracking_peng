@@ -7,7 +7,7 @@ Plots columns 3, 4, 5 (25%, 50%, 75%) vs line number.
 Prints min/max for columns 2, 6 (0%, 100%).
 """
 
-import sys
+import argparse
 import csv
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
@@ -16,11 +16,26 @@ import numpy as np
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python plot_quantiles.py <csv_file>", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='Plot quantile columns from a CSV file containing image statistics.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+CSV Format:
+  filename, 0%%, 25%%, 50%%, 75%%, 100%%
 
-    csv_file = sys.argv[1]
+Output:
+  - Plots columns 3, 4, 5 (25%%, 50%%, 75%% quantiles) vs line number
+  - Prints min/max values for columns 2, 6 (0%%, 100%% quantiles)
+  - Saves plot to <csv_file>_plot.png
+        '''
+    )
+    parser.add_argument(
+        'csv_file',
+        help='CSV file containing quantile data'
+    )
+
+    args = parser.parse_args()
+    csv_file = args.csv_file
 
     # Read CSV data
     line_numbers = []
