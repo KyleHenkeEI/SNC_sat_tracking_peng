@@ -59,16 +59,41 @@ Output:
     print(f"Column 2 (0% quantile): min={min(col2_values)}, max={max(col2_values)}")
     print(f"Column 6 (100% quantile): min={min(col6_values)}, max={max(col6_values)}")
 
+    # Convert to numpy arrays for IQR calculations
+    col3_array = np.array(col3_values)  # Q1
+    col5_array = np.array(col5_values)  # Q3
+    iqr = col5_array - col3_array
+
+    # Calculate IQR-based limits
+    iqr_multipliers = [1.0, 2.0, 2.5, 3.0]
+    lower_limits = {k: col3_array - k * iqr for k in iqr_multipliers}
+    upper_limits = {k: col5_array + k * iqr for k in iqr_multipliers}
+
     # Create plot
     plt.figure(figsize=(12, 8))
-    plt.plot(line_numbers, col3_values, label='25% quantile', alpha=0.7)
-    plt.plot(line_numbers, col4_values, label='50% quantile', alpha=0.7)
-    plt.plot(line_numbers, col5_values, label='75% quantile', alpha=0.7)
+
+    # Plot quantiles
+    plt.plot(line_numbers, col3_values, label='25% quantile (Q1)', alpha=0.7, linewidth=2)
+    plt.plot(line_numbers, col4_values, label='50% quantile (Q2)', alpha=0.7, linewidth=2)
+    plt.plot(line_numbers, col5_values, label='75% quantile (Q3)', alpha=0.7, linewidth=2)
+
+    # Plot IQR limits with different line styles
+    line_styles = ['--', '-.', ':', (0, (3, 1, 1, 1))]  # dashed, dash-dot, dotted, custom
+    colors_lower = ['red', 'darkred', 'maroon', 'firebrick']
+    colors_upper = ['blue', 'darkblue', 'navy', 'royalblue']
+
+    for i, k in enumerate(iqr_multipliers):
+        plt.plot(line_numbers, lower_limits[k],
+                linestyle=line_styles[i], color=colors_lower[i],
+                alpha=0.6, linewidth=1.5, label=f'Q1 - {k}×IQR')
+        plt.plot(line_numbers, upper_limits[k],
+                linestyle=line_styles[i], color=colors_upper[i],
+                alpha=0.6, linewidth=1.5, label=f'Q3 + {k}×IQR')
 
     plt.xlabel('Line Number')
     plt.ylabel('Value')
-    plt.title('Quantiles vs Line Number')
-    plt.legend()
+    plt.title('Quantiles and IQR Limits vs Line Number')
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=9)
     plt.grid(True, alpha=0.3)
 
     # Save to file
