@@ -111,6 +111,10 @@ def main():
                        default='average', help='Downsampling method')
     parser.add_argument('--output-dir', default='downsampled',
                        help='Output directory for downsampled images')
+    parser.add_argument('--min-value', type=int, required=True,
+                       help='Minimum value for scaling (values below this will be clipped)')
+    parser.add_argument('--max-value', type=int, required=True,
+                       help='Maximum value for scaling (values above this will be clipped)')
 
     args = parser.parse_args()
 
@@ -147,18 +151,13 @@ def main():
                 # multiply by 4 if wanted to get 14 bits up to 16
                 # pil_image = Image.fromarray(4 * downsampled, mode='I;16')
 
-                # ran tool to find min_value=3530 and max_value=16332. Expand that out to full range, crop if outside
-                # min_value = 3530 
-                # min_value = 9667
-                # min_value = 9517
-                # min_value = 9153
-                min_value = 0
-
-                # max_value = 16332
-                # max_value = 2**13-1
-                # max_value = 11012
-                # max_value = 11691
-                max_value = 2**14 -1
+                # Scale pixel values to full 16-bit range
+                # Previously hardcoded values (for reference):
+                # min_value = 0, max_value = 2**14-1
+                # min_value = 3530, max_value = 16332
+                # min_value = 9153, max_value = 11691
+                min_value = args.min_value
+                max_value = args.max_value
 
                 M = 2**16 - 1
                 downsampled = M/(max_value - min_value) * (downsampled - min_value)
