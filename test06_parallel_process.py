@@ -215,10 +215,17 @@ def main():
 
     # Define parameter grid
     cameras = [0, 1]
+    # cameras = [0]
+
     tiles = range(6)  # [0, 1, 2, 3, 4, 5]
+    # tiles = [0]
+
     # methods = ['average', 'max']
     methods = ['max']
-    iqr_factors = [2.0, 2.5, 3.0]
+
+    # iqr_factors = [2.0, 2.5, 3.0]
+    iqr_factors = [2.0]
+
     # factors = [16, 32]
     factors = [16]
 
