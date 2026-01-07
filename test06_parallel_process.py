@@ -212,17 +212,11 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Define parameter grid
-    ### cameras = [0, 1]
-    ### tiles = range(6)  # [0, 1, 2, 3, 4, 5]
-    ### methods = ['average', 'max']
-    ### iqr_factors = [1.5, 2.0, 2.5, 3.0]
-    ### factors = [16, 32]
-
-    cameras = [0]
-    tiles = [0]
-    methods = ['max']
-    iqr_factors = [2.5]
-    factors = [32]
+    cameras = [0, 1]
+    tiles = range(6)  # [0, 1, 2, 3, 4, 5]
+    methods = ['average', 'max']
+    iqr_factors = [2.0, 2.5, 3.0]
+    factors = [16, 32]
 
     # Generate all combinations
     cases = list(itertools.product(cameras, tiles, methods, iqr_factors, factors))
