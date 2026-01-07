@@ -122,13 +122,15 @@ def process_single_case(camera, tile, method, iqr_factor, downsample_factor, out
             # Apply IQR-based scaling with parameterized IQR factor
             q00, q25, q50, q75, q100 = np.percentile(data, [0, 25, 50, 75, 100])
             IQR = q75 - q25
-            min_value = q25 - iqr_factor*IQR
-            max_value = q75 + iqr_factor*IQR
+            # min value is either the minimum of the data or the editing limit, whichever is greater
+            min_value = max(q00,  q25 - iqr_factor*IQR)
+            # max value is either the maximum of the data or the editing limit, whichever is less
+            max_value = min(q100, q75 + iqr_factor*IQR)
 
             M = 2**16 - 1
             data = M/(max_value - min_value) * (data - min_value)
-            data = data.astype(np.uint16)
             data = np.clip(data, 0, M)
+            data = data.astype(np.uint16)
 
             image = data.reshape(4096, 4096)
 
