@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
 import argparse
+import glob
 import itertools
 import os
+import subprocess
 import sys
 from multiprocessing import Pool
 
@@ -160,6 +162,41 @@ def process_single_case(camera, tile, method, iqr_factor, downsample_factor, out
         except Exception as e:
             print(f"✗ Error processing {filename}: {e}")
 
+    # Create MP4 video from PGM files if any were created
+    if results:
+        mp4_filename = f"{case_dir}.mp4"
+        print(f"Creating MP4 video: {mp4_filename}")
+        try:
+            # Use ffmpeg to create video from PGM files
+            cmd = [
+                'ffmpeg', '-y',  # Overwrite output file if it exists
+                '-framerate', '15',
+                '-pattern_type', 'glob',
+                '-i', f'{case_dir}/*.pgm',
+                '-c:v', 'libx264',
+                '-crf', '18',
+                '-pix_fmt', 'yuv420p',
+                mp4_filename
+            ]
+            subprocess.run(cmd, check=True, capture_output=True)
+            print(f"✓ Created video: {mp4_filename}")
+
+            # Delete PGM files to save disk space
+            print(f"Deleting PGM files from {case_dir}")
+            pgm_files = glob.glob(os.path.join(case_dir, '*.pgm'))
+            for pgm_file in pgm_files:
+                os.remove(pgm_file)
+            print(f"✓ Deleted {len(pgm_files)} PGM file(s)")
+
+            # Remove the empty case directory
+            os.rmdir(case_dir)
+            print(f"✓ Removed directory: {case_dir}")
+
+        except subprocess.CalledProcessError as e:
+            print(f"✗ Error creating MP4: {e.stderr.decode()}")
+        except Exception as e:
+            print(f"✗ Error in cleanup: {e}")
+
     return results
 
 def main():
@@ -175,11 +212,17 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Define parameter grid
-    cameras = [0, 1]
-    tiles = range(6)  # [0, 1, 2, 3, 4, 5]
-    methods = ['average', 'max']
-    iqr_factors = [1.5, 2.0, 2.5, 3.0]
-    factors = [16, 32]
+    ### cameras = [0, 1]
+    ### tiles = range(6)  # [0, 1, 2, 3, 4, 5]
+    ### methods = ['average', 'max']
+    ### iqr_factors = [1.5, 2.0, 2.5, 3.0]
+    ### factors = [16, 32]
+
+    cameras = [0]
+    tiles = [0]
+    methods = ['max']
+    iqr_factors = [2.5]
+    factors = [32]
 
     # Generate all combinations
     cases = list(itertools.product(cameras, tiles, methods, iqr_factors, factors))
