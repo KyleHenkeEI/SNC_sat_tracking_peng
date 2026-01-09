@@ -45,7 +45,11 @@ def process_single_case(camera, tile, output_dir):
 
     first_time = True
 
-    for filename in filenames:
+    max_files = 10
+
+    for num_file, filename in enumerate(filenames):
+        if num_file > max_files: break
+
         try:
             # Read raw data as uint16
             with fs.open(filename, 'rb', compression='infer') as f:
@@ -91,11 +95,11 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Define parameter grid
-    # cameras = [0, 1]
-    cameras = [0]
+    cameras = [0, 1]
+    # cameras = [1]
 
-    # tiles = range(6)  # [0, 1, 2, 3, 4, 5]
-    tiles = [0]
+    tiles = range(6)  # [0, 1, 2, 3, 4, 5]
+    # tiles = [0]
 
     # Generate all combinations
     cases = list(itertools.product(cameras, tiles))
