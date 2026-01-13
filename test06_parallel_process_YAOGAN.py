@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import gc
 import glob
 import itertools
 import os
@@ -93,6 +94,7 @@ def process_single_case(camera, tile, method, iqr_factor, downsample_factor, out
 
     if not filenames:
         print(f"Warning: No files found for pattern {pattern}")
+        fs.clear_instance_cache()
         return []
 
     print(f"Found {len(filenames)} file(s) matching pattern")
@@ -161,8 +163,14 @@ def process_single_case(camera, tile, method, iqr_factor, downsample_factor, out
             print(f"✓ Saved: {output_filename} (shape: {downsampled.shape})")
             results.append(output_filename)
 
+            # Explicitly delete large arrays to free memory
+            del data, image, downsampled, pil_image, decompressed_data
+            gc.collect()
+
         except Exception as e:
             print(f"✗ Error processing {filename}: {e}")
+            # Clean up on error too
+            gc.collect()
 
     # Create MP4 video from PGM files if any were created
     if results:
@@ -198,6 +206,11 @@ def process_single_case(camera, tile, method, iqr_factor, downsample_factor, out
             print(f"✗ Error creating MP4: {e.stderr.decode()}")
         except Exception as e:
             print(f"✗ Error in cleanup: {e}")
+
+    # Clean up GCS filesystem to release connections and cached data
+    fs.clear_instance_cache()
+    del fs
+    gc.collect()
 
     return results
 
