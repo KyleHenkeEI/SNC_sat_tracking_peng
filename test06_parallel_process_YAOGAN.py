@@ -182,7 +182,7 @@ def process_single_case(camera, tile, method, iqr_factor, downsample_factor, out
                 'ffmpeg', '-y',  # Overwrite output file if it exists
                 '-framerate', '15',
                 '-pattern_type', 'glob',
-                '-i', f'{case_dir}/*.pgm',
+                '-i', f"'{case_dir}/*.pgm'",
                 '-c:v', 'libx264',
                 '-crf', '18',
                 '-pix_fmt', 'yuv420p',
