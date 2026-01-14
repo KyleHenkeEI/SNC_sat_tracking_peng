@@ -182,13 +182,13 @@ def process_single_case(camera, tile, method, iqr_factor, downsample_factor, out
                 'ffmpeg', '-y',  # Overwrite output file if it exists
                 '-framerate', '15',
                 '-pattern_type', 'glob',
-                '-i', f"'{case_dir}/*.pgm'",
+                '-i', f'{case_dir}/*.pgm',  # No quotes - subprocess handles escaping
                 '-c:v', 'libx264',
                 '-crf', '18',
                 '-pix_fmt', 'yuv420p',
                 mp4_filename
             ]
-            subprocess.run(cmd, check=True, capture_output=True)
+            subprocess.run(cmd, check=True, capture_output=True, stdin=subprocess.DEVNULL)
             print(f"✓ Created video: {mp4_filename}")
 
             # Delete PGM files to save disk space
