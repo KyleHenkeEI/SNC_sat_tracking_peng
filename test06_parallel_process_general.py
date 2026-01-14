@@ -85,7 +85,11 @@ def process_single_case(camera, tile, method, iqr_factor, downsample_factor, out
     fs = gcsfs.GCSFileSystem(project='Sierra Nevada Corp')
 
     # Build filename pattern using the dataset parameter
-    pattern = f'ei_snc_data/data/{dataset}/*/*/??/{camera}-??????{tile}-{tile}-image.rawl*'
+    if dataset in ['YAOGAN_30', 'STARLINK_30254']:
+        pattern = f'ei_snc_data/data/{dataset}/*/*/??/{camera}-??????{tile}-{tile}-image.rawl*'
+    elif dataset in ['2025_12']:
+        pattern = f'ei_snc_data/data/{dataset}/*/??/{camera}-??????{tile}-{tile}-image.rawl*'
+
     print(f"Processing: cam={camera}, tile={tile}, method={method}, iqr={iqr_factor}, factor={downsample_factor}")
     print(f"  Dataset: {dataset}")
     print(f"  Output directory: {case_dir}")
