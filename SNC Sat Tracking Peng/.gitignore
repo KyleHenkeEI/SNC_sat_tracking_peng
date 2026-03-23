@@ -1,0 +1,7 @@
+# Generated runs and large media (regenerate locally)
+comparison_results/
+comparison_results_full/
+comparison_results_single/
+comparison_results_smoke/
+*.mp4
+__pycache__/
