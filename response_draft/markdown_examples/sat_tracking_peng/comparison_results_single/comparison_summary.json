@@ -1,0 +1,18 @@
+[
+  {
+    "Algorithm": "Advanced baseline",
+    "Family": "Adaptive KF + Mahalanobis",
+    "Noise Robustness": 3,
+    "Motion Adaptability": 3,
+    "Clutter Handling": 3,
+    "Compute Load": 2,
+    "Notes": "Current adaptive-Kalman baseline.",
+    "Status": "ok",
+    "Runtime (s)": 260.83,
+    "Frames": 1474,
+    "Detections": 29261,
+    "Tracks": 2464,
+    "Output Video": "d:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results_single\\cam0_tile0_advanced_baseline.mp4",
+    "Track Log": "d:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results_single\\cam0_tile0_advanced_baseline_tracks.txt"
+  }
+]

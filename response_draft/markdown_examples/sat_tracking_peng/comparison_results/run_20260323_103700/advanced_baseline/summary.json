@@ -1,0 +1,15 @@
+{
+  "tracker_name": "Advanced baseline",
+  "output_tag": "advanced_baseline",
+  "family": "Adaptive KF + Mahalanobis",
+  "input_video": "D:\\khenk\\Downloads\\parallel_run5_2025-12-20260128T124203Z-3-001\\parallel_run5_2025-12\\cam0_tile0_max_iqr2.0_down32.mp4",
+  "output_dir": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\run_20260323_103700\\advanced_baseline",
+  "status": "ok",
+  "runtime_s": 126.59,
+  "frames_processed": 1474,
+  "total_detections": 29261,
+  "tracks_metric": 2464,
+  "output_video": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\run_20260323_103700\\advanced_baseline\\output_video.mp4",
+  "track_log": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\run_20260323_103700\\advanced_baseline\\tracks.txt",
+  "error": null
+}

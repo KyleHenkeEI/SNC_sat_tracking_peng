@@ -1,0 +1,15 @@
+{
+  "tracker_name": "Particle assisted",
+  "output_tag": "particle_assisted",
+  "family": "Particle filter hybrid",
+  "input_video": "D:\\khenk\\Downloads\\parallel_run5_2025-12-20260128T124203Z-3-001\\parallel_run5_2025-12\\cam0_tile0_max_iqr2.0_down32.mp4",
+  "output_dir": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\parallel_run5_first_video_all_trackers\\particle_assisted",
+  "status": "ok",
+  "runtime_s": 136.4,
+  "frames_processed": 1474,
+  "total_detections": 29261,
+  "tracks_metric": 2306,
+  "output_video": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\parallel_run5_first_video_all_trackers\\particle_assisted\\output_video.mp4",
+  "track_log": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\parallel_run5_first_video_all_trackers\\particle_assisted\\tracks.txt",
+  "error": null
+}

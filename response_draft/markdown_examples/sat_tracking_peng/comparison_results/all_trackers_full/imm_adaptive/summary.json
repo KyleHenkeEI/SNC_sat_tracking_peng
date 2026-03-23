@@ -1,0 +1,15 @@
+{
+  "tracker_name": "IMM adaptive",
+  "output_tag": "imm_adaptive",
+  "family": "IMM-like",
+  "input_video": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\__comparison_input.mp4",
+  "output_dir": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full\\imm_adaptive",
+  "status": "ok",
+  "runtime_s": 0.07,
+  "frames_processed": 30,
+  "total_detections": 29,
+  "tracks_metric": 1,
+  "output_video": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full\\imm_adaptive\\output_video.mp4",
+  "track_log": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full\\imm_adaptive\\tracks.txt",
+  "error": null
+}

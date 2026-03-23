@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-03-23T10:12:17",
+  "notebook_source": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\Sat_Tracking_Video - PMB.ipynb",
+  "input_video": "D:\\khenk\\Downloads\\parallel_run5_2025-12-20260128T124203Z-3-001\\parallel_run5_2025-12\\cam0_tile0_max_iqr2.0_down32.mp4",
+  "summary_csv": "d:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results_single\\comparison_summary.csv",
+  "summary_json": "d:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results_single\\comparison_summary.json",
+  "plot_png": "d:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results_single\\comparison_plot.png",
+  "trackers": [
+    {
+      "Algorithm": "Advanced baseline",
+      "Family": "Adaptive KF + Mahalanobis",
+      "Noise Robustness": 3,
+      "Motion Adaptability": 3,
+      "Clutter Handling": 3,
+      "Compute Load": 2,
+      "Notes": "Current adaptive-Kalman baseline.",
+      "Status": "ok",
+      "Runtime (s)": 260.83,
+      "Frames": 1474,
+      "Detections": 29261,
+      "Tracks": 2464,
+      "Output Video": "d:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results_single\\cam0_tile0_advanced_baseline.mp4",
+      "Track Log": "d:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results_single\\cam0_tile0_advanced_baseline_tracks.txt"
+    }
+  ]
+}

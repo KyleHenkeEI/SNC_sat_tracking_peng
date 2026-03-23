@@ -1,0 +1,15 @@
+{
+  "tracker_name": "Current PMB",
+  "output_tag": "pmb_baseline",
+  "family": "PMB",
+  "input_video": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\__comparison_input.mp4",
+  "output_dir": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full_v2\\pmb_baseline",
+  "status": "ok",
+  "runtime_s": 0.14,
+  "frames_processed": 30,
+  "total_detections": 29,
+  "tracks_metric": 1,
+  "output_video": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full_v2\\pmb_baseline\\output_video.mp4",
+  "track_log": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full_v2\\pmb_baseline\\tracks.txt",
+  "error": null
+}

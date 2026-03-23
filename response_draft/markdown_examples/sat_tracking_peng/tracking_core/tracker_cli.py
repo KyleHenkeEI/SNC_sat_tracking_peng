@@ -1,0 +1,87 @@
+"""Shared CLI entry for single-tracker terminal runs."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+from tracking_core.variants import TRACKER_VARIANTS, instantiate_tracker
+
+
+def _spec_by_name(name: str) -> dict[str, Any]:
+    for spec in TRACKER_VARIANTS:
+        if spec["name"] == name:
+            return spec
+    raise KeyError(name)
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Run one satellite tracker variant.")
+    p.add_argument("--input-video", type=Path, required=True)
+    p.add_argument("--output-dir", type=Path, required=True, help="Folder for output_video.mp4, tracks.txt, summary.json")
+    p.add_argument("--quiet", action="store_true", help="Less console output from the tracker")
+    return p.parse_args()
+
+
+def main_for(tracker_name: str) -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+    args = parse_args()
+    try:
+        spec = _spec_by_name(tracker_name)
+    except KeyError:
+        print(f"Unknown tracker name: {tracker_name}", file=sys.stderr)
+        return 2
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    input_video = str(args.input_video.resolve())
+
+    summary: dict[str, Any] = {
+        "tracker_name": tracker_name,
+        "output_tag": spec["output_tag"],
+        "family": spec["family"],
+        "input_video": input_video,
+        "output_dir": str(args.output_dir.resolve()),
+        "status": "pending",
+        "runtime_s": None,
+        "frames_processed": None,
+        "total_detections": None,
+        "tracks_metric": None,
+        "output_video": None,
+        "track_log": None,
+        "error": None,
+    }
+
+    try:
+        tracker = instantiate_tracker(spec, input_video, args.output_dir)
+        if args.quiet:
+            tracker.verbose = False
+        summary["output_video"] = str(Path(tracker.output_video_path).resolve())
+        summary["track_log"] = str(Path(tracker.track_log_path).resolve())
+
+        t0 = time.perf_counter()
+        result = tracker.run()
+        summary["runtime_s"] = round(time.perf_counter() - t0, 2)
+        summary["status"] = "ok"
+        summary["frames_processed"] = result.get("frames_processed")
+        summary["total_detections"] = result.get("total_detections")
+        summary["tracks_metric"] = result.get("unique_tracks", result.get("log_entries"))
+    except Exception as exc:  # noqa: BLE001
+        summary["status"] = "error"
+        summary["error"] = str(exc)
+        out_json = args.output_dir / "summary.json"
+        out_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    out_json = args.output_dir / "summary.json"
+    out_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    print(f"Done: {tracker_name} in {summary['runtime_s']}s -> {summary['output_video']}")
+    return 0

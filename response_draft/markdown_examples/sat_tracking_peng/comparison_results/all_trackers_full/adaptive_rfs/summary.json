@@ -1,0 +1,15 @@
+{
+  "tracker_name": "Adaptive RFS family",
+  "output_tag": "adaptive_rfs",
+  "family": "PMBM / GLMB / LMB inspired",
+  "input_video": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\__comparison_input.mp4",
+  "output_dir": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full\\adaptive_rfs",
+  "status": "ok",
+  "runtime_s": 0.06,
+  "frames_processed": 30,
+  "total_detections": 29,
+  "tracks_metric": 1,
+  "output_video": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full\\adaptive_rfs\\output_video.mp4",
+  "track_log": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full\\adaptive_rfs\\tracks.txt",
+  "error": null
+}

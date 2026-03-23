@@ -1,0 +1,9 @@
+Algorithm,Family,Noise Robustness,Motion Adaptability,Clutter Handling,Compute Load,Notes,Status,Runtime (s),Frames,Detections,Tracks,Output Video,Track Log
+Advanced baseline,Adaptive KF + Mahalanobis,3,3,3,2,Current adaptive-Kalman baseline.,not run,,,,,,
+Current PMB,PMB,3,3,4,3,Current notebook PMB implementation.,not run,,,,,,
+IMM adaptive,IMM-like,4,5,3,3,Best first option for variable speed regimes.,not run,,,,,,
+JPDA lite,JPDA approximation,4,4,5,4,Soft assignment for ambiguous detections.,not run,,,,,,
+MHT lite,MHT approximation,4,4,5,5,Delayed commitment for ambiguous tracks.,not run,,,,,,
+Particle assisted,Particle filter hybrid,5,4,3,5,Useful when centroids are noisy or streaky.,not run,,,,,,
+Track-before-detect,TBD,5,3,2,4,Best when weak signals die at thresholding.,not run,,,,,,
+Adaptive RFS family,PMBM / GLMB / LMB inspired,4,4,5,4,Closest extension of the current PMB path.,not run,,,,,,

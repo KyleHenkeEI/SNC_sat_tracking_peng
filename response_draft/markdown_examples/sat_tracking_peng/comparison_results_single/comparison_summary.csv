@@ -1,0 +1,2 @@
+Algorithm,Family,Noise Robustness,Motion Adaptability,Clutter Handling,Compute Load,Notes,Status,Runtime (s),Frames,Detections,Tracks,Output Video,Track Log
+Advanced baseline,Adaptive KF + Mahalanobis,3,3,3,2,Current adaptive-Kalman baseline.,ok,260.83,1474,29261,2464,d:\khenk\Downloads\SNC Sat Tracking Peng\comparison_results_single\cam0_tile0_advanced_baseline.mp4,d:\khenk\Downloads\SNC Sat Tracking Peng\comparison_results_single\cam0_tile0_advanced_baseline_tracks.txt

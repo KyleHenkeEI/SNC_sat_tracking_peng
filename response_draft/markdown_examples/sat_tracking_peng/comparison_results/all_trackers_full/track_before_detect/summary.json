@@ -1,0 +1,15 @@
+{
+  "tracker_name": "Track-before-detect",
+  "output_tag": "track_before_detect",
+  "family": "TBD",
+  "input_video": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\__comparison_input.mp4",
+  "output_dir": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full\\track_before_detect",
+  "status": "ok",
+  "runtime_s": 0.06,
+  "frames_processed": 30,
+  "total_detections": 25,
+  "tracks_metric": 1,
+  "output_video": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full\\track_before_detect\\output_video.mp4",
+  "track_log": "D:\\khenk\\Downloads\\SNC Sat Tracking Peng\\comparison_results\\all_trackers_full\\track_before_detect\\tracks.txt",
+  "error": null
+}
