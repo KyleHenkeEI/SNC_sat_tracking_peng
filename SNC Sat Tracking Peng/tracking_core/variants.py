@@ -17,6 +17,7 @@ from tracking_core.pmb import (
     PoissonMultiBernoulliTracker,
     TrueTbdPmTracker,
 )
+from tracking_core.presets import apply_preset_to_kwargs
 
 
 ADVANCED_BASELINE_KWARGS = dict(
@@ -1383,6 +1384,9 @@ def instantiate_tracker(
     spec: dict,
     input_video: str,
     tracker_output_dir: Path,
+    *,
+    preset_name: str | None = None,
+    preset_file: str | Path | None = None,
 ) -> object:
     """Build a tracker; writes to tracker_output_dir/output_video.mp4 and tracks.txt."""
     tracker_output_dir = Path(tracker_output_dir)
@@ -1392,10 +1396,19 @@ def instantiate_tracker(
     base = ADVANCED_BASELINE_KWARGS if spec["kind"] == "advanced" else PMB_BASELINE_KWARGS
     kwargs = deepcopy(base)
     kwargs.update(spec.get("overrides", {}))
+    kwargs, preset_meta = apply_preset_to_kwargs(
+        kwargs,
+        spec,
+        preset_name=preset_name,
+        preset_file=preset_file,
+    )
     kwargs["input_video_path"] = input_video
     kwargs["output_video_path"] = video_path
     kwargs["track_log_path"] = log_path
-    return spec["class"](**kwargs)
+    tracker = spec["class"](**kwargs)
+    tracker.preset_name = preset_meta["preset_name"]
+    tracker.preset_file = preset_meta["preset_file"]
+    return tracker
 
 
 def compare_trackers(

@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from tracking_core.presets import preset_descriptions
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
@@ -78,6 +80,9 @@ def parse_args() -> argparse.Namespace:
         help="Tracker names to run (default: all). Use --list-trackers for names.",
     )
     p.add_argument("--list-trackers", action="store_true", help="List tracker names and exit.")
+    p.add_argument("--list-presets", action="store_true", help="List available preset names and exit.")
+    p.add_argument("--preset", type=str, default=None, help="Preset name from tracker_presets.json")
+    p.add_argument("--preset-file", type=Path, default=None, help="Optional custom preset JSON file")
     p.add_argument(
         "--skip-run",
         action="store_true",
@@ -282,6 +287,8 @@ def run_subprocess_tracker(
     tracker_dir: Path,
     *,
     capture_output: bool = False,
+    preset_name: str | None = None,
+    preset_file: Path | None = None,
 ) -> subprocess.CompletedProcess[str | None]:
     script_path = WORKSPACE / script_name
     cmd = [
@@ -292,6 +299,10 @@ def run_subprocess_tracker(
         "--output-dir",
         str(tracker_dir.resolve()),
     ]
+    if preset_name:
+        cmd.extend(["--preset", preset_name])
+    if preset_file:
+        cmd.extend(["--preset-file", str(preset_file.resolve())])
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     if capture_output:
@@ -349,12 +360,17 @@ def write_manifest(
     run_dir: Path,
     input_video: str,
     rows: list[dict[str, Any]],
+    *,
+    preset_name: str | None = None,
+    preset_file: str | None = None,
 ) -> None:
     manifest = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "pipeline": "terminal_subprocess",
         "workspace": str(WORKSPACE),
         "input_video": input_video,
+        "preset_name": preset_name,
+        "preset_file": preset_file,
         "summary_csv": str(run_dir / "comparison_summary.csv"),
         "summary_json": str(run_dir / "comparison_summary.json"),
         "plot_png": str(run_dir / "comparison_plot.png"),
@@ -373,6 +389,11 @@ def main() -> int:
         print("Available trackers:")
         for spec in _load_variants_registry():
             print(f"- {spec['name']}: {spec['notes']}")
+        return 0
+    if args.list_presets:
+        print("Available presets:")
+        for name, desc in preset_descriptions(args.preset_file).items():
+            print(f"- {name}: {desc}")
         return 0
 
     video_path = resolve_input_video(args.input_video, args.input_dir)
@@ -434,6 +455,8 @@ def main() -> int:
             input_video,
             tracker_dir,
             capture_output=args.capture_output,
+            preset_name=args.preset,
+            preset_file=args.preset_file,
         )
         wall = round(time.perf_counter() - t0, 2)
         if args.capture_output:
@@ -458,7 +481,13 @@ def main() -> int:
     save_rows_csv(rows, run_dir / "comparison_summary.csv")
     save_rows_json(rows, run_dir / "comparison_summary.json")
     plot_saved = save_comparison_plot(rows, run_dir / "comparison_plot.png")
-    write_manifest(run_dir, str(input_video), rows)
+    write_manifest(
+        run_dir,
+        str(input_video),
+        rows,
+        preset_name=args.preset,
+        preset_file=str(args.preset_file.resolve()) if args.preset_file else None,
+    )
 
     if not args.skip_run and not args.no_comparison_videos and len(ok_videos) >= 2:
         from tracking_core.comparison_video import (

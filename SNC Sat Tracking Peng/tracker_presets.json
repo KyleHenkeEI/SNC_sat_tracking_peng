@@ -1,0 +1,233 @@
+{
+  "default": {
+    "description": "Use the built-in defaults from tracking_core/variants.py with no extra preset overrides."
+  },
+  "cleaner_tracks": {
+    "description": "Make the non-PMB trackers more conservative to reduce false jumps and weak visible tracks.",
+    "trackers": {
+      "Advanced baseline": {
+        "max_distance": 20,
+        "mahalanobis_threshold": 3.2,
+        "min_detection_confidence": 0.24,
+        "min_display_confidence": 0.62
+      },
+      "IMM adaptive": {
+        "mahalanobis_threshold": 3.4,
+        "max_speed": 78.0,
+        "min_detection_confidence": 0.24,
+        "min_display_confidence": 0.62
+      },
+      "JPDA lite": {
+        "jpda_margin": 0.32,
+        "jpda_max_soft_neighbors": 1,
+        "min_display_confidence": 0.64
+      },
+      "MHT lite": {
+        "ambiguity_margin": 0.26,
+        "min_display_confidence": 0.64
+      },
+      "Particle assisted": {
+        "mahalanobis_threshold": 3.3,
+        "min_display_confidence": 0.64
+      },
+      "Temporal-accumulation TBD (approx)": {
+        "max_distance": 18,
+        "min_detection_confidence": 0.26,
+        "min_display_confidence": 0.66
+      }
+    }
+  },
+  "large_fast_recall": {
+    "description": "Bias the PMB large/fast tracker toward stronger recall on obvious large or fast movers.",
+    "trackers": {
+      "PMB large/fast": {
+        "max_detection_area": 1200,
+        "max_acceleration": 28.0,
+        "existence_threshold": 0.44,
+        "min_display_confidence": 0.62,
+        "lf_bg_threshold_scale": 0.64,
+        "lf_supplement_diff_percentile": 84.0,
+        "lf_supplement_diff_floor": 2.0,
+        "lf_supplement_intensity_relax": 12,
+        "lf_strong_birth_r0": 0.42,
+        "lf_moderate_birth_r0": 0.28,
+        "lf_display_miss_grace": 7
+      }
+    }
+  },
+  "field_review": {
+    "description": "Recommended preset for full comparison review: cleaner non-PMB tracks plus stronger PMB large/fast recall.",
+    "trackers": {
+      "Advanced baseline": {
+        "max_distance": 20,
+        "mahalanobis_threshold": 3.2,
+        "min_detection_confidence": 0.24,
+        "min_display_confidence": 0.62
+      },
+      "IMM adaptive": {
+        "mahalanobis_threshold": 3.4,
+        "max_speed": 78.0,
+        "min_detection_confidence": 0.24,
+        "min_display_confidence": 0.62
+      },
+      "JPDA lite": {
+        "jpda_margin": 0.32,
+        "jpda_max_soft_neighbors": 1,
+        "min_display_confidence": 0.64
+      },
+      "MHT lite": {
+        "ambiguity_margin": 0.26,
+        "min_display_confidence": 0.64
+      },
+      "Particle assisted": {
+        "mahalanobis_threshold": 3.3,
+        "min_display_confidence": 0.64
+      },
+      "Temporal-accumulation TBD (approx)": {
+        "max_distance": 18,
+        "min_detection_confidence": 0.26,
+        "min_display_confidence": 0.66
+      },
+      "PMB large/fast": {
+        "max_detection_area": 1200,
+        "max_acceleration": 28.0,
+        "existence_threshold": 0.44,
+        "min_display_confidence": 0.62,
+        "lf_bg_threshold_scale": 0.64,
+        "lf_supplement_diff_percentile": 84.0,
+        "lf_supplement_diff_floor": 2.0,
+        "lf_supplement_intensity_relax": 12,
+        "lf_strong_birth_r0": 0.42,
+        "lf_moderate_birth_r0": 0.28,
+        "lf_display_miss_grace": 7
+      }
+    }
+  },
+  "very_clean": {
+    "description": "Favor visual stability over recall. Good when you want the least flicker and fewest weak visible tracks.",
+    "trackers": {
+      "Advanced baseline": {
+        "max_distance": 18,
+        "mahalanobis_threshold": 3.0,
+        "min_detection_confidence": 0.28,
+        "min_display_confidence": 0.68
+      },
+      "IMM adaptive": {
+        "mahalanobis_threshold": 3.2,
+        "max_speed": 72.0,
+        "min_detection_confidence": 0.28,
+        "min_display_confidence": 0.68
+      },
+      "JPDA lite": {
+        "jpda_margin": 0.24,
+        "jpda_max_soft_neighbors": 1,
+        "min_display_confidence": 0.7
+      },
+      "MHT lite": {
+        "ambiguity_margin": 0.18,
+        "min_display_confidence": 0.7
+      },
+      "Particle assisted": {
+        "mahalanobis_threshold": 3.1,
+        "min_display_confidence": 0.7
+      },
+      "Temporal-accumulation TBD (approx)": {
+        "max_distance": 16,
+        "min_detection_confidence": 0.3,
+        "min_display_confidence": 0.72
+      },
+      "Track-before-detect": {
+        "existence_threshold": 0.56,
+        "min_display_confidence": 0.78,
+        "tbd_evidence_percentile": 90.0
+      }
+    }
+  },
+  "aggressive_large_fast": {
+    "description": "Push harder for obvious large and fast movers, accepting a bit more clutter risk.",
+    "trackers": {
+      "PMB large/fast": {
+        "max_detection_area": 1600,
+        "max_acceleration": 34.0,
+        "existence_threshold": 0.4,
+        "min_display_confidence": 0.56,
+        "lf_bg_threshold_scale": 0.58,
+        "lf_supplement_diff_percentile": 80.0,
+        "lf_supplement_diff_floor": 1.8,
+        "lf_supplement_intensity_relax": 14,
+        "lf_strong_birth_r0": 0.46,
+        "lf_moderate_birth_r0": 0.32,
+        "lf_display_miss_grace": 8
+      }
+    }
+  },
+  "night_sky_low_snr": {
+    "description": "Tune for dim low-SNR night-sky clips: lower detection floors, stronger PMB soft births, and conservative non-PMB visibility.",
+    "global": {
+      "bg_threshold": 8
+    },
+    "trackers": {
+      "Advanced baseline": {
+        "min_intensity": 16,
+        "max_distance": 18,
+        "mahalanobis_threshold": 3.1,
+        "min_detection_confidence": 0.26,
+        "min_display_confidence": 0.66
+      },
+      "IMM adaptive": {
+        "min_intensity": 16,
+        "mahalanobis_threshold": 3.3,
+        "max_speed": 76.0,
+        "min_detection_confidence": 0.26,
+        "min_display_confidence": 0.66
+      },
+      "JPDA lite": {
+        "min_intensity": 16,
+        "jpda_margin": 0.28,
+        "jpda_max_soft_neighbors": 1,
+        "min_display_confidence": 0.68
+      },
+      "MHT lite": {
+        "min_intensity": 16,
+        "ambiguity_margin": 0.22,
+        "min_display_confidence": 0.68
+      },
+      "Particle assisted": {
+        "min_intensity": 16,
+        "mahalanobis_threshold": 3.15,
+        "min_display_confidence": 0.68
+      },
+      "Temporal-accumulation TBD (approx)": {
+        "min_intensity": 14,
+        "max_distance": 16,
+        "min_detection_confidence": 0.28,
+        "min_display_confidence": 0.7
+      },
+      "Track-before-detect": {
+        "min_intensity": 18,
+        "existence_threshold": 0.5,
+        "min_display_confidence": 0.74,
+        "tbd_evidence_percentile": 84.0,
+        "tbd_evidence_floor": 1.3
+      },
+      "Current PMB": {
+        "min_intensity": 22,
+        "min_display_confidence": 0.7,
+        "existence_threshold": 0.48
+      },
+      "PMB large/fast": {
+        "min_intensity": 18,
+        "max_detection_area": 1400,
+        "existence_threshold": 0.42,
+        "min_display_confidence": 0.58,
+        "lf_bg_threshold_scale": 0.56,
+        "lf_supplement_diff_percentile": 78.0,
+        "lf_supplement_diff_floor": 1.6,
+        "lf_supplement_intensity_relax": 16,
+        "lf_strong_birth_r0": 0.48,
+        "lf_moderate_birth_r0": 0.34,
+        "lf_display_miss_grace": 9
+      }
+    }
+  }
+}

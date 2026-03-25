@@ -78,12 +78,51 @@ Exact names (in quotes when they contain spaces) are used with `--trackers`.
 
 ---
 
+## Tuning presets
+
+You can now switch between preset tuning profiles without editing Python:
+
+```powershell
+python run_tracking_comparison.py --list-presets
+```
+
+Built-in preset file:
+
+- `tracker_presets.json`
+
+Typical preset names:
+
+- `default` - use the registry defaults exactly as defined in `tracking_core/variants.py`
+- `cleaner_tracks` - more conservative non-PMB trackers
+- `large_fast_recall` - stronger recall on `PMB large/fast`
+- `field_review` - combines cleaner non-PMB settings with stronger `PMB large/fast` recall
+- `very_clean` - minimum flicker / minimum weak visible tracks
+- `aggressive_large_fast` - strongest push for large / fast PMB recall
+- `night_sky_low_snr` - dim night-sky clips with weaker signal and lower contrast
+
+You can also point to your own JSON file:
+
+```powershell
+python run_tracking_comparison.py --list-presets --preset-file ".\my_presets.json"
+```
+
+---
+
 ## Run a single tracker
 
 Each launcher writes **`output_video.mp4`**, **`tracks.txt`**, and **`summary.json`** under `--output-dir`.
 
 ```powershell
 python run_advanced.py --input-video "D:\data\clip.mp4" --output-dir "D:\out\run1\advanced_baseline"
+```
+
+With a preset:
+
+```powershell
+python run_pmb_large_fast.py `
+  --input-video "D:\data\clip.mp4" `
+  --output-dir "D:\out\run1\pmb_large_fast" `
+  --preset large_fast_recall
 ```
 
 Other entry points:
@@ -112,7 +151,8 @@ Add **`--quiet`** to reduce console noise from the tracker itself.
 ```powershell
 python run_tracking_comparison.py `
   --input-video "D:\data\clip.mp4" `
-  --output-dir "D:\out\comparison_results"
+  --output-dir "D:\out\comparison_results" `
+  --preset field_review
 ```
 
 If you omit **`--trackers`**, **all** registered trackers run **one after another** (can take a long time on long clips).
@@ -157,6 +197,9 @@ By default a timestamped subfolder is created under `--output-dir`. Fix the name
 | `--run-name NAME` | Subfolder under `--output-dir`; default: `run_YYYYMMDD_HHMMSS`. |
 | `--trackers NAME ...` | Which trackers to run; default: all. |
 | `--list-trackers` | Print names and exit (no video needed). |
+| `--list-presets` | Print available preset names and exit. |
+| `--preset NAME` | Apply a named preset from `tracker_presets.json` to tracker kwargs before the run. |
+| `--preset-file PATH` | Load presets from a custom JSON file instead of the built-in one. |
 | `--skip-run` | Write registry-based summaries only; no tracker subprocesses. |
 | `--no-comparison-videos` | Skip `comparison_grid.mp4` and `comparison_with_original.mp4`. |
 | `--capture-output` | Buffer child stdout/stderr and print after each tracker (no live stream). **Default** is live streaming to your terminal. |
