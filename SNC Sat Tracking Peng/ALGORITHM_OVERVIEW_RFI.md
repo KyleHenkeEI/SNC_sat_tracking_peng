@@ -2,22 +2,22 @@
 
 This document describes the **algorithms and methods** implemented in the *SNC Sat Tracking Peng* codebase for passive-optical satellite (or point-source) tracking in video. It is written for **requests for information (RFI)** and external technical review.
 
+**Primary RFI theory anchor:** **PMBM** (`PoissonMultiBernoulliMixtureTracker` in `tracking_core/pmbm.py`) is the main **multi-hypothesis** narrative: a **log-weighted mixture** over several **global association** patterns per frame, built on the same **Bernoulli** measurement update and **Textbook PMB** cost model (**Mahalanobis** gate, frame-scaled $\lambda_c$, Hungarian assignment + **miss** columns, Poisson-style births). **MAP** mixture components drive overlays, `tracks.txt`, and metrics. **Textbook PMB** is the **single-posterior** simplification on the same front end—use it when explaining the core PMB update without mixture branching. Other trackers are **engineering alternatives**; see §5–7.
+
 **Math in this file:** Display and inline formulas use `$...$` and `$$...$$` so they render in **Cursor / VS Code** Markdown preview (enable **Markdown › Math** if needed). Plain **GitHub.com** does not render LaTeX in `.md` files; export to PDF/HTML with a LaTeX-capable tool if you need math there.
 
 ---
 
 ## 1. Executive summary
 
-The project provides **ten named tracker configurations** registered in `tracking_core/variants.py` (`TRACKER_VARIANTS`). Under the hood there are **two primary pipelines**:
+The project registers **twelve named tracker configurations** in `tracking_core/variants.py` (`TRACKER_VARIANTS`). For RFI language that reflects **mixture-style** multi-target reasoning on this stack, cite **PMBM** first; use **Textbook PMB** for the **same** detector and Bernoulli formulas **without** retaining multiple association hypotheses; use **Current PMB** and other variants for **tunability, throughput, or heuristics**.
 
-
-| Family                           | Core module                                            | Idea                                                                                                                                                                                                                                                                                                    |
-| -------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Advanced (detect-then-track)** | `tracking_core/advanced.py`                            | Background subtraction → thresholded foreground → **DBSCAN** point detections → **Hungarian** assignment to tracks → **adaptive 2D Kalman** filtering, confidence, and motion gates.                                                                                                                    |
-| **PMB family**                   | `tracking_core/pmb.py` (+ subclasses in `variants.py`) | Same style **preprocessing** (for most variants) → detections → **multi-target Bernoulli-style** filtering: each hypothesized target is a **Bernoulli component** with existence probability $r$, Kalman state, Gaussian **likelihood**, survival/miss updates, births, pruning, and display filtering. |
-
-
-Several entries are **variants** that **subclass** one of these pipelines and override specific steps (association, preprocessing, detection, or PMB update scaling). Names such as **“JPDA lite”**, **“MHT lite”**, or **“Adaptive RFS family”** reflect **design inspiration**; they are **not** full textbook implementations of those methods unless stated below.
+| Role | Family | Core module | One-line idea |
+| ---- | ------ | ----------- | ------------- |
+| **Primary theory (mixture)** | **PMBM** | `tracking_core/pmbm.py` | Per frame: several **global** assignments (best Hungarian + **forced-miss** perturbations); **log-weights** updated and **normalized**; **cap** hypotheses; **MAP** Bernoulli set for display/logs. Same gated likelihoods, $\lambda_c$, births as Textbook PMB **per** child. |
+| **Single-posterior baseline** | **Textbook PMB** | `tracking_core/pmb.py` | One Hungarian solution per frame; no mixture—**simpler** RFI baseline when mixture detail is not needed. |
+| **Engineering PMB variants** | PMB path | `pmb.py` + `variants.py` | **Greedy** (**Current PMB**), adaptive gates (**Adaptive RFS**, **PMB large/fast**), **budgeted** likelihoods (**PMB sparse (fast)**), **soft-map** (**Track-before-detect**). |
+| **Alternative pipeline** | Advanced | `tracking_core/advanced.py` | DBSCAN + **Hungarian** + explicit tracks + **adaptive 2D Kalman**. **IMM / JPDA / MHT / particle / TBD-approx** are **“lite”**—not full textbook filters unless noted in §6. |
 
 **Outputs** (per run): annotated video, `tracks.txt`, and `summary.json` (see `tracking_core/tracker_cli.py` and `README_Tracker_Comparison.md`).
 
@@ -25,208 +25,221 @@ Several entries are **variants** that **subclass** one of these pipelines and ov
 
 ## 2. Terminology (for RFI readers)
 
-- **Implemented algorithm** — Code path executed at runtime (e.g. `PoissonMultiBernoulliTracker.run`).
+- **Implemented algorithm** — Code path executed at runtime (e.g. `PoissonMultiBernoulliMixtureTracker.run`).
 - **Variant** — A subclass or configuration that changes part of a base pipeline while reusing the rest.
-- **Literature-inspired / “lite”** — Naming aligns with classical methods (JPDA, MHT, IMM, GLMB/LMB) but the implementation may use **heuristics** or **greedy** steps instead of the full formal filter.
+- **Literature-inspired / “lite”** — Naming aligns with classical methods (JPDA, MHT, IMM, GLMB/LMB) but the code may use **heuristics** or **greedy** steps instead of the full formal filter.
+- **MAP (here)** — Highest **log-weight** mixture hypothesis after per-frame normalization; used for video overlay and track log, not a full marginal estimator.
 
 ---
 
-## 3. Poisson multi-Bernoulli (PMB) family — detailed description
+## 3. PMBM — primary theory (multi-hypothesis)
 
-The canonical implementation is `**PoissonMultiBernoulliTracker`** in `tracking_core/pmb.py`, exposed in the CLI as **“Current PMB”**. Related trackers (**Adaptive RFS family**, **PMB large/fast**, **Track-before-detect**) extend or specialize this path.
+**Class:** `PoissonMultiBernoulliMixtureTracker` in `tracking_core/pmbm.py`. **CLI:** **“PMBM”** (`run_pmbm.py`). **Hyperparameters:** `pmbm_k_best` (max assignment variants per parent), `pmbm_max_hypotheses` (mixture cap).
 
-### 3.1 Conceptual model (theory-forward)
+### 3.1 Random-set and mixture view
 
-In random finite set (RFS) tracking, a **multi-Bernoulli** representation describes the multi-target posterior as a set of **independent Bernoulli** targets: each target $i$ has **existence probability** $r_i \in [0,1]$ and a **spatial state density** (here approximated by a **Gaussian** via a Kalman filter on $\mathbf{x} \in \mathbb{R}^4$).
+A **multi-Bernoulli** description uses independent **Bernoulli** components, each with existence $r_i \in [0,1]$ and a spatial density (here **Gaussian** via constant-velocity Kalman on $\mathbf{x} = [x, y, v_x, v_y]^\top$, $dt = 1$).
 
-A **Poisson multi-Bernoulli mixture (PMBM)** / related filters combine **unknown number of births** (often Poisson) with **Bernoulli** tracks and perform **data association** across hypotheses. **Standard PMB/PMBM** updates require structured handling of **missed detections**, **clutter**, and **multi-target association** (often via labeled RFS or explicit hypothesis trees).
+**Poisson multi-Bernoulli mixture (PMBM)** formulations in the literature represent the multi-target posterior as a **mixture** over **multi-Bernoulli** (and related) structures, with **data association** uncertainty expressed through **multiple weighted hypotheses** rather than a single joint assignment.
 
-### 3.2 What this codebase implements
+This implementation maintains a **finite** list of hypotheses $h = 1,\ldots,H$, each with **log-weight** $\log w_h$ (normalized each frame so $\sum_h w_h = 1$) and its own list of `BernoulliComponent` instances. Each hypothesis is a **full** multi-Bernoulli state for that branch.
 
-The implementation maintains a list of `**BernoulliComponent`** objects. Each component stores:
+### 3.2 Shared front-end and time update (all hypotheses)
 
-- **Existence probability** $r$ (attribute `r`).
-- **State** $\mathbf{x} = [x, y, v_x, v_y]^\top$ (constant-velocity model, discrete time step $dt = 1$ per frame).
-- **Covariance** $\mathbf{P}$, with fixed **process noise** $\mathbf{Q}$ and **measurement noise** $\mathbf{R} = 2\mathbf{I}_2$ inside `BernoulliComponent` (not exposed as tracker hyperparameters).
+**Detection (shared with Textbook / Current PMB):** median background → absdiff / blur / threshold → **DBSCAN** centroids (`compute_background`, `preprocess_frame`, `detect_objects`).
 
-**Detection front-end (Current PMB):**
-
-1. **Background:** median of subsampled frames (`compute_background`).
-2. **Preprocessing:** absolute difference vs background, Gaussian blur, binary threshold (`preprocess_frame`).
-3. **Measurements:** connected bright pixels clustered by **DBSCAN**; centroids and peak intensities are detections (`detect_objects`).
-
-**Time update (predict):** for each component,
+**Predict:** for **every** hypothesis independently, for each component:
 
 $$
-\mathbf{x}*{k|k-1} = \mathbf{F}\mathbf{x}*{k-1}, \qquad
-\mathbf{P}*{k|k-1} = \mathbf{F}\mathbf{P}*{k-1}\mathbf{F}^\top + \mathbf{Q},
+\mathbf{x}_{k|k-1} = \mathbf{F}\mathbf{x}_{k-1|k-1}, \qquad
+\mathbf{P}_{k|k-1} = \mathbf{F}\mathbf{P}_{k-1|k-1}\mathbf{F}^\top + \mathbf{Q},
+\qquad
+r_{k|k-1} = p_s \, r_{k-1|k-1},
 $$
 
-$$
-r_{k|k-1} = p_s r_{k-1},
-$$
+with $p_s$ = **`survival_prob`**.
 
-where $p_s$ is `**survival_prob`** in code.
+### 3.3 Measurement update: cost matrix, branches, weights
 
-**Measurement update:** let $\mathbf{z}*j \in \mathbb{R}^2$ be detection $j$. The **predicted measurement** is $\hat{\mathbf{z}} = \mathbf{H}\mathbf{x}*{k|k-1}$, innovation $\boldsymbol{\nu}_j = \mathbf{z}*j - \hat{\mathbf{z}}$, innovation covariance $\mathbf{S} = \mathbf{H}\mathbf{P}*{k|k-1}\mathbf{H}^\top + \mathbf{R}$. The **Gaussian likelihood** is
+For a given hypothesis with $M$ predicted components and $N$ detections, build the **same** rectangular cost matrix as **Textbook PMB**: gated **Mahalanobis** innovations, $C_{ij} = -\log L_{ij}$ for valid $(i,j)$, **miss** columns $C_{i,N+i}$ at fixed cost, large **BIG** fill elsewhere (`_build_textbook_cost_matrix`).
 
-$$
-L_{ij} = \mathcal{N}\left(\mathbf{z}_j; \hat{\mathbf{z}}, \mathbf{S}\right).
-$$
+**Association variants:** enumerate up to **`pmbm_k_best`** assignments: (1) global optimum from `linear_sum_assignment`; (2) additional solutions from **forced-miss** perturbations (one row forced to its miss column, then re-solve), **deduplicated** by assignment signature. This is a **practical** multi-solution set—not **Murty’s** full ranked list on the assignment polytope.
 
-Associations that violate **physical gates** (speed, acceleration, turn rate) are zeroed (`check_physical_constraints`).
-
-For a given component $i$ and candidate detection $j$, the code updates existence with a **Bayes-rule-style ratio** (detection vs clutter) of the form
+For parent log-weight $\log w_p$ and child assignment cost $c$ (sum of selected $C_{ij}$), with $c^\star = \min c$ over siblings from that parent, use
 
 $$
-r_{ij}^{+} = \frac{p_d r L_{ij}}{p_d r L_{ij} + \lambda_c (1 - r) + \varepsilon},
+\log w_{\mathrm{child}} = \log w_p - (c - c^\star),
 $$
 
-where $p_d$ is `**detection_prob`**, $\lambda_c$ is a **clutter intensity** derived from `**clutter_rate`** (normalized by a fixed $128 \times 128$ factor in code), and $\varepsilon$ is a small numerical floor.
+so the **best** child from that parent retains the parent’s relative weight; then apply **log-sum-exp** normalization across **all** children from **all** parents. Keep the top **`pmbm_max_hypotheses`** by weight and renormalize.
 
-**Data association** is **greedy per component**: components are processed in list order; each chooses the unused detection that yields the largest $r_{ij}^{+}$ above a minimum threshold; otherwise a **miss** update $r \leftarrow (1-p_d) r$ is applied. **Unused detections** spawn **new Bernoulli births** with initial $r$ and a large initial covariance, then an immediate Kalman update to that measurement.
+**Bernoulli update** for each child: apply the **Textbook PMB** association outcome—associated cells use the same $r_{ij}^{+}$ ratio with $\lambda_c = \texttt{clutter\_rate}/(H\cdot W)$ (or $128^2$ fallback); misses use $r \leftarrow (1-p_d)r$; unused detections spawn births with $r_0 \approx \texttt{birth\_rate}/(\texttt{birth\_rate}+\lambda_c)$.
 
-**Pruning and identity:** components with $r$ below `**pruning_threshold`** are removed. When $r >$ `**existence_threshold**`, `**detection_count` ≥ `min_track_length**`, and no ID yet, a `**track_id**` is assigned (`prune_and_merge` — note: there is **no explicit merge** of duplicate Bernoullis in the base class).
+### 3.4 Output, pruning, and MAP
 
-**Confirmed tracks for display/logging** additionally require heuristic **confidence** (`calculate_confidence`), speed bounds, and `**min_display_confidence`** (`get_confirmed_tracks`).
+**Pruning:** each hypothesis drops components with $r$ below **`pruning_threshold`** and very old weak components (same age rule as base PMB). **Track IDs** are assigned only on the **MAP** hypothesis (`prune_and_merge`), then copied back into that slot in the mixture.
 
-### 3.3 Relation to textbook PMB / PMBM (RFI caveat)
+**Display / logs:** `get_confirmed_tracks` reads **`self.bernoulli_components`**, which is set to a **deep copy** of the **MAP** hypothesis after each `update_components` and kept consistent after pruning.
 
-For external accuracy, the following distinctions matter:
+### 3.5 Caveat: not full δ-PMBM / labeled RFS
 
+| Literature PMBM / δ-GLMB-style | This **PMBM** implementation |
+| ------------------------------ | ----------------------------- |
+| Poisson birth **field** over state; full MBM structure | Births remain **new Bernoullis from unused detections** with $r_0$ from **`birth_rate`** vs $\lambda_c$. |
+| Systematic **k-best** joint association (e.g. Murty) | **Hungarian + forced-miss** variants only; capped at **`pmbm_k_best`**. |
+| Labeled tracks and hypothesis trees | **MAP**-based **track_id** assignment; no labeled RFS recursion. |
+| Exact mixture reduction / merging theory | **Top-$H$** pruning by weight; no principled merge of duplicate MB structures beyond deduplication of assignment keys. |
 
-| Textbook PMB / PMBM                                              | This implementation                                                                                                                |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Poisson birth field, structured multi-target hypothesis handling | Births are **ad hoc** new Bernoullis from unused detections; `**birth_rate`** is stored but **not** used in the shown update path. |
-| Global optimal or marginal association                           | **Greedy** association; measurement used at most once; component **order** matters.                                                |
-| Clutter model tied to sensor field of view                       | `**clutter_rate / (128·128)`** is a **fixed normalization**, not automatically scaled to frame resolution.                         |
-| Labeled MB / GLMB-style track labels                             | Track IDs are assigned by **heuristic confirmation**, not full labeled RFS machinery.                                              |
-
-
-**Bottom line:** the tracker is best described as a **PMB-inspired multi-Bernoulli filter with Kalman kinematics and greedy data association**, suitable as an engineering baseline rather than a reference implementation of a specific published PMBM recursion.
-
-### 3.4 Extensions on the PMB path
-
-- **Adaptive RFS family** (`AdaptiveRFSFamilyTracker` in `variants.py`): enriches detections (e.g. bbox/area), **scales** association gates with target speed/size heuristics, and adjusts confirmation thresholds — still the **same single-layer Bernoulli update** as base PMB, not full GLMB/LMB.
-- **PMB large/fast** (`PmbLargeFastTracker`): subclasses the adaptive family; **dual soft/hard** masks, **percentile-based** supplemental proposals, stronger births, gentler prune/miss behavior, and **display** smoothing — aimed at large/fast movers.
-- **Track-before-detect** (`TrueTbdPmTracker` in `pmb.py`): **no global binary mask** in the loop; builds a **fused soft residual map** ($0.6 \max + 0.4$ mean over a short window), proposes measurements from **local maxima** with adaptive floors, and **scales** $L_{ij}$ by **local integrated evidence** around prediction and detection. Conceptually closer to **TBD-style likelihood lifting** while retaining the same Bernoulli existence update structure.
+**Bottom line for RFI:** **PMBM** here is a **defensible engineering mixture** over **global association** patterns on the **Textbook PMB** measurement model—closer to PMBM narrative than a single posterior, but **not** a reference δ-PMBM filter from the literature.
 
 ---
 
-## 4. Advanced baseline and variants (concise)
+## 4. Textbook PMB — single-posterior baseline (short)
 
-### 4.1 Advanced baseline
+**Class:** `TextbookPoissonMultiBernoulliTracker` in `tracking_core/pmb.py`. **CLI:** **“Textbook PMB”**.
 
-**Class:** `AdvancedSatelliteTracker` in `tracking_core/advanced.py`.  
-**CLI:** `run_advanced.py` — **“Advanced baseline”**.
-
-**Pipeline (high level):**
-
-1. **Background** — median (or mode for short clips) over frames.
-2. **Foreground** — `absdiff`, threshold, optional morphology.
-3. **Detection** — **DBSCAN** on foreground pixels → centroids, bounding boxes, areas.
-4. **Association** — cost matrix using **Mahalanobis** / distance with **gating**; **Hungarian algorithm** (`linear_sum_assignment`) for one-to-one matching.
-5. **Filtering** — per-track **adaptive 2D Kalman** (`AdaptiveKalmanFilter2D`).
-6. **Track quality** — confidence scoring, **motion** filters (e.g. min speed to suppress stars/hot pixels), lifecycle (lost/re-ID timeouts).
-
-**Core equations** match the standard linear Gaussian Kalman cycle (see also `README_Satellite_Tracking.md`):
-
-$$
-\hat{\mathbf{x}}*{k|k-1} = \mathbf{F}\hat{\mathbf{x}}*{k-1|k-1}, \quad
-\mathbf{P}*{k|k-1} = \mathbf{F}\mathbf{P}*{k-1|k-1}\mathbf{F}^\top + \mathbf{Q},
-$$
-
-$$
-\mathbf{K}*k = \mathbf{P}*{k|k-1}\mathbf{H}^\top \left(\mathbf{H}\mathbf{P}*{k|k-1}\mathbf{H}^\top + \mathbf{R}\right)^{-1},
-\quad
-\hat{\mathbf{x}}*{k|k} = \hat{\mathbf{x}}_{k|k-1} + \mathbf{K}_k(\mathbf{z}*k - \mathbf{H}\hat{\mathbf{x}}*{k|k-1}).
-$$
-
-### 4.2 IMM adaptive
-
-**Class:** `IMMAdaptiveMotionTracker`.  
-**Idea:** **Heuristic motion modes** (`search`, `cruise`, `maneuver`, `fast`) driven by speed and innovation; each mode scales **Mahalanobis** gates and motion limits. **Not** a full IMM with explicit model probabilities and mixing.
-
-### 4.3 JPDA lite
-
-**Class:** `JPDALiteTracker`.  
-**Idea:** Greedy association with optional **soft blending** of neighboring detections (temperature-weighted centroid). **Not** full JPDA joint association probabilities.
-
-### 4.4 MHT lite
-
-**Class:** `MHTLiteTracker`.  
-**Idea:** **Hungarian** assignment plus **tentative** handling when two detections are ambiguous (blended update, marked tentative). **Not** an $N$-scan MHT or explicit hypothesis tree.
-
-### 4.5 Particle assisted
-
-**Class:** `ParticleAssistedTracker`.  
-**Idea:** Per-track **bootstrap particle filter** blended with Kalman prediction for association costs; resampling against measurements. Detection and overall structure remain **Advanced**-like.
-
-### 4.6 Temporal-accumulation TBD (approx)
-
-**Class:** `TrackBeforeDetectTracker`.  
-**Idea:** Overrides preprocessing only: buffers last $W$ **absdiff** maps, fuses $0.6 \max + 0.4$ mean, then **hard threshold** and runs the **standard Advanced** detect-then-track. Documented in-code as **legacy / not classical TBD** on raw images without thresholding.
+Same **§3.2** front-end and **§3.3** Bernoulli / $\lambda_c$ / birth formulas, but **one** Hungarian solution per frame—**no** mixture. Use this when the RFI should stay **minimal** while still citing **Mahalanobis** gating, **frame-scaled** clutter, and **Poisson-style** births.
 
 ---
 
-## 5. Registry index (all named algorithms)
+## 5. Current PMB and other PMB-path variants (short)
+
+**Current PMB:** **greedy** association, **physical** gates, clutter often $128^2$-normalized; births not tied to **`birth_rate`** the same way.
+
+| Name | Essence |
+| ---- | ------- |
+| **Adaptive RFS family** | Richer detections; scaled gates—still **single-layer** Bernoulli update. |
+| **PMB large/fast** | Adaptive RFS + masks / proposals / display smoothing. |
+| **PMB sparse (fast)** | Greedy PMB + spatial gating, budgets, streaming. |
+| **Track-before-detect** | Soft residual map + local evidence scaling. |
+
+---
+
+## 6. Advanced baseline and “lite” variants (short)
+
+**Advanced baseline:** median background → DBSCAN → Hungarian → **adaptive 2D Kalman** per track.
+
+**IMM / JPDA / MHT / particle / TBD-approx:** heuristic or partial implementations—see `README_Tracker_Comparison.md`.
+
+---
+
+## 7. Registry index (all named algorithms)
 
 
 | Name (CLI / comparison)            | Kind     | Primary class                  | Notes                                |
 | ---------------------------------- | -------- | ------------------------------ | ------------------------------------ |
-| Advanced baseline                  | advanced | `AdvancedSatelliteTracker`     | Full `advanced.py` pipeline          |
-| Current PMB                        | pmb      | `PoissonMultiBernoulliTracker` | Canonical PMB path, `pmb.py`         |
+| PMBM                               | pmb      | `PoissonMultiBernoulliMixtureTracker` | **RFI primary theory** (§3), MAP output |
+| Textbook PMB                       | pmb      | `TextbookPoissonMultiBernoulliTracker` | Single-posterior reference (§4)      |
+| Current PMB                        | pmb      | `PoissonMultiBernoulliTracker` | Greedy PMB, `pmb.py`                 |
 | PMB large/fast                     | pmb      | `PmbLargeFastTracker`          | Adaptive RFS + large/fast heuristics |
+| PMB sparse (fast)                  | pmb      | `SparseBudgetPmTracker`        | Streaming + gated likelihoods + budgets |
+| Track-before-detect                | pmb      | `TrueTbdPmTracker`             | Soft map TBD + PMB updates           |
+| Adaptive RFS family                | pmb      | `AdaptiveRFSFamilyTracker`     | PMB + adaptive gates / confirmation  |
+| Advanced baseline                  | advanced | `AdvancedSatelliteTracker`     | Full `advanced.py` pipeline          |
 | IMM adaptive                       | advanced | `IMMAdaptiveMotionTracker`     | Heuristic IMM-like gating            |
 | JPDA lite                          | advanced | `JPDALiteTracker`              | Soft / greedy JPDA-inspired          |
 | MHT lite                           | advanced | `MHTLiteTracker`               | Hungarian + tentative blend          |
 | Particle assisted                  | advanced | `ParticleAssistedTracker`      | PF + KF hybrid                       |
-| Track-before-detect                | pmb      | `TrueTbdPmTracker`             | Soft map TBD + PMB updates           |
 | Temporal-accumulation TBD (approx) | advanced | `TrackBeforeDetectTracker`     | Fused threshold + Advanced           |
-| Adaptive RFS family                | pmb      | `AdaptiveRFSFamilyTracker`     | PMB + adaptive gates / confirmation  |
 
 
-*The comparison runner may list the same logical set; see `TRACKER_VARIANTS` in `tracking_core/variants.py` for the authoritative list and default hyperparameters.*
-
----
-
-## 6. Qualitative vs measured metrics
-
-In batch comparisons (`run_tracking_comparison.py`), **noise / motion / clutter / compute** scores (1–5) come from **static** per-variant metadata in `TRACKER_VARIANTS`. They are **labels for plotting**, not estimated from a specific clip. **Measured** quantities include runtime, frame count, detection count, and track counts from each run’s `summary.json` (see `README_Tracker_Comparison.md`).
+*Authoritative kwargs and list: `TRACKER_VARIANTS` in `tracking_core/variants.py`.*
 
 ---
 
-## 7. Key file map
+## 8. Performance expectations (no ground truth)
+
+**Classical empirical rates are undefined without labels.** Detection rate (recall), false-alarm rate, and missed-detection rate require ground truth (or synthetic truth) to classify measurements and tracks as true vs. spurious. Per-run `summary.json` counts (e.g. total detections) are **operational**, not $P_d$, $P_{\mathrm{fa}}$, or $P_{\mathrm{miss}}$.
+
+**Footnote (applies to both tables below):** *Empirical $P_d$, $P_{\mathrm{fa}}$, and missed-detection rates are **not reported**: there is no labeled evaluation set on the project videos. Table 8.1 entries are **engineering expectations** from architecture and registry defaults/overrides in `tracking_core/variants.py`, not validated performance. Table 8.2 lists **filter tuning parameters** for the Bernoulli measurement model where applicable; they are **not** the empirical hit rate of the threshold + DBSCAN front-end.*
+
+**Trend reference:** *Higher / similar / lower* are **relative** to the usual default in each pipeline family: **Advanced baseline** for `advanced` trackers, **Current PMB** for `pmb` trackers.
+
+### Table 8.1 — Qualitative trends (all registered algorithms)
+
+| Algorithm | Expected detection / recall (trend) | Expected false-alarm & clutter sensitivity (trend) | Expected missed detection & track drop-out (trend) |
+| --------- | ------------------------------------- | ---------------------------------------------------- | --------------------------------------------------- |
+| Advanced baseline | Reference | Reference | Reference |
+| Current PMB | Reference | Reference | Reference |
+| Textbook PMB | Similar (same front-end); global Hungarian + Mahalanobis gate can pass marginal hits differently than greedy PMB | Similar clutter model ($\lambda_c$, births); registry lowers `min_display_confidence` vs default PMB, so **more** weak tracks may appear | Similar miss update $(1-p_d)r$; association differs from greedy path—drop-out **similar**, fragmentation pattern may differ |
+| PMBM | Similar to Textbook PMB (same cost model per hypothesis) | Similar to Textbook PMB | **Similar or slightly better** under association ambiguity (mixture defers to MAP); not a guarantee of lower FA |
+| PMB large/fast | **Higher** (softer / OR masks, supplemental percentile blobs, larger `max_detection_area`) | **Higher** (more proposals → more spurious tracks unless pruned) | **Lower** tendency to lose established targets (gentler miss / display grace, tuned `detection_prob` and clutter) |
+| PMB sparse (fast) | **Lower** ceiling in dense scenes (per-frame detection and component **caps**, spatial gate on likelihoods) | **Lower** from hard budgets and gating (fewer simultaneous hypotheses) | **Higher** risk that real targets fall outside budget or gate and **drop** |
+| Track-before-detect | **Different** failure mode vs global binary mask (soft fused map, local evidence); can surface weak peaks but **capped** proposals/frame | **Medium** (percentile floor and patch-based scaling; not monotonically “safer” than threshold PMB) | **Medium** (strict `min_display_confidence` in registry; TBD-style birth/update trade-offs) |
+| Adaptive RFS family | **Higher** than Current PMB (richer `detect_objects`, bbox/area, scaled gates) | **Higher** clutter exposure vs tighter Current PMB | **Lower** drop-out for large/fast movers via dynamic confirmation and gates (still single-layer PMB update) |
+| IMM adaptive | **Higher** effective linkage under **variable speed** (scaled Mahalanobis / motion gates per mode) | **Similar** front-end; clutter score is a plot label, not measured | **Lower** tendency to **miss** associations during maneuvers vs baseline Advanced |
+| JPDA lite | Similar front-end | **Higher** tolerance when multiple detections compete (soft / neighbor-aware association—**lite**, not full JPDA) | Similar timeouts vs baseline; ambiguous cases may **linger** rather than hard-split |
+| MHT lite | Similar front-end | **Higher** tolerance under ambiguity (tentative blend + longer windows in registry) | Similar; tentative tracks can **delay** commitment |
+| Particle assisted | Similar detections | Similar | **Lower** drop-out from **noisy centroids** (particles stabilize state vs Kalman-only in places) |
+| Temporal-accumulation TBD (approx) | **Higher** proposal rate (lower `bg_threshold`, lower `min_intensity` in registry) | **Higher** FA risk from aggressive thresholding after temporal fusion | Depends on fusion and gates; **similar** Advanced association afterward |
+
+### Table 8.2 — Bernoulli filter parameters (PMB path only)
+
+These values are **`PMB_BASELINE_KWARGS` merged with each entry’s `overrides`** in `tracking_core/variants.py`. $\lambda_c$ is **frame-scaled** as $ \texttt{clutter\_rate}/(H{\cdot}W) $ for **Textbook PMB**, **PMBM**, **Track-before-detect**, and when **`pmb_frame_scaled_clutter`** is enabled (**PMB sparse (fast)**); **Current PMB** and some greedy paths may use the implementation’s $128^2$ normalization—see `pmb.py` and `README_Tracker_Comparison.md`.
+
+| Algorithm | `detection_prob` (modeled $p_d$ in Bernoulli update) | `clutter_rate` (drives $\lambda_c$) | `birth_rate` |
+| --------- | ---------------------------------------------------- | ------------------------------------- | ------------ |
+| Advanced baseline | — | — | — |
+| Current PMB | 0.85 | 5.0 | 0.1 |
+| Textbook PMB | 0.85 | 5.0 | 0.1 |
+| PMBM | 0.85 | 5.0 | 0.1 |
+| PMB large/fast | 0.82 | 6.0 | 0.1 |
+| PMB sparse (fast) | 0.85 | 5.0 | 0.1 |
+| Track-before-detect | 0.80 | 5.5 | 0.1 |
+| Adaptive RFS family | 0.85 | 5.0 | 0.1 |
+| IMM adaptive | — | — | — |
+| JPDA lite | — | — | — |
+| MHT lite | — | — | — |
+| Particle assisted | — | — | — |
+| Temporal-accumulation TBD (approx) | — | — | — |
+
+*Table 8.2 footnote: parameters are **not** ROC operating points. Advanced trackers use thresholds such as `bg_threshold`, `mahalanobis_threshold`, and `min_detection_confidence` from `ADVANCED_BASELINE_KWARGS` plus overrides instead of `detection_prob` / `clutter_rate` / `birth_rate`.*
+
+**Paths to empirical metrics later:** label a subset of frames, run synthetic video with known trajectories, or define **diagnostic** proxies (unmatched detections per frame, fragmentation)—proxies still require careful definition and are not classical $P_{\mathrm{fa}}$ without truth.
+
+---
+
+## 9. Qualitative vs measured metrics
+
+In batch comparisons (`run_tracking_comparison.py`), **noise / motion / clutter / compute** scores (1–5) are **static** labels in `TRACKER_VARIANTS`, not estimated per clip. **Measured** fields include runtime, frame count, detection count, and track counts from each `summary.json` (see `README_Tracker_Comparison.md`).
+
+---
+
+## 10. Key file map
 
 
 | File                                               | Role                                                     |
 | -------------------------------------------------- | -------------------------------------------------------- |
-| `tracking_core/advanced.py`                        | Advanced pipeline, Kalman, Hungarian, DBSCAN detection   |
-| `tracking_core/pmb.py`                             | PMB tracker, `BernoulliComponent`, `TrueTbdPmTracker`    |
-| `tracking_core/variants.py`                        | All variant classes, `TRACKER_VARIANTS`, baseline kwargs |
-| `tracking_core/tracker_cli.py`                     | CLI, `summary.json`, output paths                        |
-| `tracking_core/presets.py`, `tracker_presets.json` | Preset merging for hyperparameters                       |
-| `README_Tracker_Comparison.md`                     | Exact code map variant-by-variant                        |
-| `README_Satellite_Tracking.md`                     | Advanced pipeline narrative                              |
+| `tracking_core/pmbm.py`                            | **PMBM** mixture tracker                                 |
+| `tracking_core/pmb.py`                             | Bernoulli PMB, **Textbook PMB**, sparse/TBD variants     |
+| `tracking_core/advanced.py`                        | Advanced pipeline, Kalman, Hungarian, DBSCAN           |
+| `tracking_core/variants.py`                        | Variant classes, `TRACKER_VARIANTS`, baseline kwargs   |
+| `tracking_core/tracker_cli.py`                     | CLI, `summary.json`, output paths                      |
+| `tracking_core/presets.py`, `tracker_presets.json` | Preset merging                                         |
+| `README_Tracker_Comparison.md`                     | Exact code map variant-by-variant                      |
+| `README_Satellite_Tracking.md`                     | Advanced pipeline narrative                            |
 
 
 ---
 
-## 8. Summary comparison (operational, not formal optimality)
+## 11. Summary comparison (operational, not formal optimality)
 
 
 | Need                                              | Reasonable first try                             |
 | ------------------------------------------------- | ------------------------------------------------ |
-| Standard detect-then-track with global assignment | **Advanced baseline**                            |
+| **RFI theory: mixture over association**          | **PMBM** (§3)                                    |
+| **RFI theory: single posterior, same measurements** | **Textbook PMB** (§4)                          |
+| Simple greedy PMB                                 | **Current PMB**                                  |
+| Standard detect-then-track with explicit tracks   | **Advanced baseline**                            |
 | Variable speed / maneuver heuristics              | **IMM adaptive**                                 |
 | Ambiguous dense detections                        | **JPDA lite** / **MHT lite** (understand “lite”) |
 | Noisy centroids / streaky appearance              | **Particle assisted**                            |
-| Explicit existence probabilities + birth/miss     | **Current PMB** (with §3.3 caveats)              |
 | Larger/faster targets, more recall                | **PMB large/fast** or **Adaptive RFS family**    |
-| Softer measurement map, TBD-style                 | **Track-before-detect** (`TrueTbdPmTracker`)     |
+| Throughput / sparse scoring                       | **PMB sparse (fast)**                            |
+| Softer measurement map, TBD-style                 | **Track-before-detect**                          |
 | Quick temporal fusion baseline                    | **Temporal-accumulation TBD (approx)**           |
 
 
 ---
 
-*Document version: aligned with repository structure as of authoring; implementation details refer to `tracking_core/` sources.*
+*Document version: aligned with `tracking_core/` sources; for air-to-air framing see [AIR_TO_AIR_ADAPTATION.md](AIR_TO_AIR_ADAPTATION.md).*

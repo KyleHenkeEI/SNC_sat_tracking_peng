@@ -27,6 +27,22 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--preset", type=str, default=None, help="Preset name from tracker_presets.json")
     p.add_argument("--preset-file", type=Path, default=None, help="Optional custom preset JSON file")
     p.add_argument("--list-presets", action="store_true", help="List available preset names and exit")
+    p.add_argument(
+        "--a2a-phase-stabilize",
+        action="store_true",
+        help="PMB only: phase-correlation translation chain before background/detect (air-to-air)",
+    )
+    p.add_argument(
+        "--a2a-clahe-clip",
+        type=float,
+        default=None,
+        help="PMB only: CLAHE clip limit (e.g. 2.0); omit to use preset/defaults only",
+    )
+    p.add_argument(
+        "--no-output-video",
+        action="store_true",
+        help="Skip writing annotated output_video.mp4 (tracking-only; runtime excludes video encode)",
+    )
     return p.parse_args()
 
 
@@ -65,34 +81,54 @@ def main_for(tracker_name: str) -> int:
         "preset_file": str(args.preset_file.resolve()) if args.preset_file else None,
         "status": "pending",
         "runtime_s": None,
+        "video_encode_runtime_s": None,
+        "wall_runtime_s": None,
         "frames_processed": None,
         "total_detections": None,
         "tracks_metric": None,
         "output_video": None,
         "track_log": None,
+        "write_video_output": None,
         "error": None,
     }
 
     try:
+        extra: dict[str, Any] = {}
+        if args.no_output_video:
+            extra["write_video_output"] = False
+        if spec.get("kind") == "pmb":
+            if args.a2a_phase_stabilize:
+                extra["a2a_phase_stabilize"] = True
+            if args.a2a_clahe_clip is not None:
+                extra["a2a_clahe_clip_limit"] = float(args.a2a_clahe_clip)
         tracker = instantiate_tracker(
             spec,
             input_video,
             args.output_dir,
             preset_name=args.preset,
             preset_file=args.preset_file,
+            extra_kwargs=extra,
         )
         if args.quiet:
             tracker.verbose = False
+        summary["write_video_output"] = bool(getattr(tracker, "write_video_output", True))
         summary["output_video"] = str(Path(tracker.output_video_path).resolve())
         summary["track_log"] = str(Path(tracker.track_log_path).resolve())
 
         t0 = time.perf_counter()
         result = tracker.run()
-        summary["runtime_s"] = round(time.perf_counter() - t0, 2)
+        wall_s = time.perf_counter() - t0
+        summary["wall_runtime_s"] = round(wall_s, 2)
+        tr = result.get("runtime_s")
+        summary["runtime_s"] = round(float(tr), 2) if tr is not None else round(wall_s, 2)
+        ve = result.get("video_encode_runtime_s")
+        summary["video_encode_runtime_s"] = round(float(ve), 2) if ve is not None else None
         summary["status"] = "ok"
         summary["frames_processed"] = result.get("frames_processed")
         summary["total_detections"] = result.get("total_detections")
         summary["tracks_metric"] = result.get("unique_tracks", result.get("log_entries"))
+        if result.get("air_to_air"):
+            summary["air_to_air"] = result["air_to_air"]
     except Exception as exc:  # noqa: BLE001
         summary["status"] = "error"
         summary["error"] = str(exc)
@@ -104,5 +140,11 @@ def main_for(tracker_name: str) -> int:
     out_json = args.output_dir / "summary.json"
     out_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-    print(f"Done: {tracker_name} in {summary['runtime_s']}s -> {summary['output_video']}")
+    out_msg = summary["output_video"] if summary.get("write_video_output") else "(no output video)"
+    rt = summary["runtime_s"]
+    ve = summary.get("video_encode_runtime_s")
+    if ve is not None and ve > 0:
+        print(f"Done: {tracker_name} tracking {rt}s (video encode {ve}s) -> {out_msg}")
+    else:
+        print(f"Done: {tracker_name} in {rt}s -> {out_msg}")
     return 0

@@ -10,7 +10,7 @@ For a **deep dive into the adaptive Kalman / “Advanced” pipeline only** (bac
 
 | Piece | Role |
 |--------|------|
-| **`tracking_core/`** | Shared library: `AdvancedSatelliteTracker`, `PoissonMultiBernoulliTracker`, variant classes, `TRACKER_VARIANTS` registry. |
+| **`tracking_core/`** | Shared library: `AdvancedSatelliteTracker`, `PoissonMultiBernoulliTracker`, `PoissonMultiBernoulliMixtureTracker`, variant classes, `TRACKER_VARIANTS` registry. |
 | **`run_*.py`** (repo root) | One script per tracker; same CLI: `--input-video`, `--output-dir`, optional `--quiet`. |
 | **`run_tracking_comparison.py`** | Runs selected (or all) tracker scripts, aggregates metrics, builds **comparison plots and videos**. |
 
@@ -18,7 +18,7 @@ For a **deep dive into the adaptive Kalman / “Advanced” pipeline only** (bac
 
 ## What is actually implemented (exact code map)
 
-The comparison does **not** ship many independent trackers from separate papers. It ships **two full pipelines** in **`tracking_core/advanced.py`** and **`tracking_core/pmb.py`**, plus **variant classes** in **`tracking_core/variants.py`** (and **`TrueTbdPmTracker`** in **`pmb.py`**) that **subclass** one of the two pipelines and override specific methods. Advanced-side variant logic lives in **`variants.py`** unless noted otherwise.
+The comparison does **not** ship many independent trackers from separate papers. It ships **two primary pipelines** in **`tracking_core/advanced.py`** and **`tracking_core/pmb.py`**, a **PMBM-style mixture** implementation in **`tracking_core/pmbm.py`**, plus **variant classes** in **`tracking_core/variants.py`** (and **`TrueTbdPmTracker`** in **`pmb.py`**) that **subclass** the PMB pipeline and override specific methods. Advanced-side variant logic lives in **`variants.py`** unless noted otherwise.
 
 ### Base pipelines (where the bulk of the code is)
 
@@ -26,6 +26,9 @@ The comparison does **not** ship many independent trackers from separate papers.
 |--------|--------|-------------------------------|
 | **`advanced.py`** | `AdvancedSatelliteTracker` | Median background, absdiff + threshold, optional morphology, **DBSCAN** on foreground pixels → centroids; **Hungarian** (`linear_sum_assignment`) on a Mahalanobis / distance cost matrix; per-track **`AdaptiveKalmanFilter2D`**; lost-track re-ID; confidence and motion gates. |
 | **`pmb.py`** | `PoissonMultiBernoulliTracker` | Same style **preprocessing** → binary mask; clustered **detections**; **Bernoulli** components with Kalman-style predict/update; **likelihood** matrix + existence updates; prune/merge; side-by-side render. |
+| **`pmb.py`** | `TextbookPoissonMultiBernoulliTracker` | Subclasses **`PoissonMultiBernoulliTracker`**: same **detection front-end** and Bernoulli **r** update formula, but **Mahalanobis** innovation gating (no motion heuristics), **frame-scaled** clutter intensity, **Hungarian** one-to-one assignment with explicit **miss** costs, and **Poisson-style** birth prior `r₀ ≈ birth_rate / (birth_rate + λ_c)`; display **confidence = r**. |
+| **`pmbm.py`** | `PoissonMultiBernoulliMixtureTracker` | Subclasses **`TextbookPoissonMultiBernoulliTracker`**: **log-weighted mixture** over several **global** assignments per frame (best **Hungarian** + **forced-miss** perturbations, deduped, capped by **`pmbm_k_best`** / **`pmbm_max_hypotheses`**); **MAP** hypothesis drives overlays and **`tracks.txt`**. Not a full literature δ-PMBM implementation. |
+| **`pmb.py`** | `SparseBudgetPmTracker` | Subclasses **`PoissonMultiBernoulliTracker`**: same greedy Bernoulli **existence** update, but **gated** likelihoods (no dense matrix), **budgeted** detections/components, optional **frame-scaled clutter**, **streaming** two-pass run when A2A is off. |
 | **`pmb.py`** | `TrueTbdPmTracker` | Subclasses **`PoissonMultiBernoulliTracker`**: **soft fused residual map** (temporal max/mean, **no** global binary mask in the loop); birth proposals from **local maxima** with a **per-frame percentile** floor; association likelihoods scaled by **local integrated evidence**. Intended as a **true TBD-style** passive-optical baseline vs threshold-then-detect. |
 
 ### Registry entry → class → what was added on top
@@ -34,14 +37,17 @@ The comparison does **not** ship many independent trackers from separate papers.
 |----------------------------|--------------|---------------|--------------------------------------|
 | **Advanced baseline** | `AdvancedSatelliteTracker` | — | Full **`advanced.py`** pipeline only. |
 | **Current PMB** | `PoissonMultiBernoulliTracker` | — | Full **`pmb.py`** pipeline only. |
+| **Textbook PMB** | `TextbookPoissonMultiBernoulliTracker` | PMB | Same preprocess/detect as **Current PMB**; **Hungarian** global assignment, **Mahalanobis** gate, **λ_c ∝ 1/(H·W)**, **birth_rate** used in birth prior; **does not** use **`check_physical_constraints`** or greedy list-order association. |
+| **PMBM** | `PoissonMultiBernoulliMixtureTracker` | Textbook PMB | Same cost matrix and Bernoulli update as **Textbook PMB** per assignment branch; maintains **multiple hypotheses** with **log-weights** (normalized each frame); **MAP** for display/log; tunables **`pmbm_k_best`**, **`pmbm_max_hypotheses`**. |
 | **PMB large/fast** | `PmbLargeFastTracker` | PMB | Subclasses **`AdaptiveRFSFamilyTracker`**: **OR** of standard and softer absdiff masks, **percentile-based supplemental** blob proposals (with relaxed intensity for large regions), **stronger births** for bright/large detections, **gentler pruning / miss decay** for fast or large established components, and short **display hysteresis** + **smoothed centroids** to cut flicker. Registry still raises **`max_detection_area`** and relaxes accel / confirmation vs base adaptive RFS. **Does not** change **`Current PMB`**. |
+| **PMB sparse (fast)** | `SparseBudgetPmTracker` | PMB | Subclasses **`PoissonMultiBernoulliTracker`**: **same** greedy Bernoulli update semantics, but **spatial gate** on centroid likelihoods (no dense score matrix), **`pmb_max_detections_per_frame`** / **`pmb_max_live_components`**, **`pmb_min_birth_intensity`**, optional **frame-scaled clutter**, **two-pass streaming** (no full in-memory frame list) when A2A is off; **`pmb_write_video_output`** can be set **false** for faster calibration. **Does not** replace **Current PMB** or **PMB large/fast**. |
 | **IMM adaptive** | `IMMAdaptiveMotionTracker` | Advanced | **Heuristic “modes”** (`search` / `cruise` / `maneuver` / `fast`) from speed + Kalman innovation; each mode scales **Mahalanobis gate**, **accel**, **turn**, **speed** limits. **`compute_association_costs`** and **`check_motion_validity`** use those profiles. **Not** a full IMM with multiple explicit motion models and mixing probabilities. |
 | **JPDA lite** | `JPDALiteTracker` | Advanced | Custom **`associate_tracks`**: greedy row-wise matching with optional **soft blend** of multiple nearby detections (default **`jpda_max_soft_neighbors=1`** = **no** centroid blend; uses **Mahalanobis + pixel** gates like Advanced). **Not** full JPDA. |
 | **MHT lite** | `MHTLiteTracker` | Advanced | Custom **`associate_tracks`**: **Hungarian** with post-gates; for **unmatched** tracks, if two candidates are **within `ambiguity_margin`**, uses a **mostly-primary** centroid blend (**~92/8**) and marks **`hypothesis_state` = tentative**. **Not** a real MHT tree or N-scan pruning. |
 | **Particle assisted** | `ParticleAssistedTracker` | Advanced | Per-track **bootstrap particle cloud** (position/velocity); **resampling** vs measurement; **`compute_association_costs`** blends **Kalman prediction** with **particle mean**; **`associate_tracks`** defers to base then **updates particles**. Still the same detection + base association structure as Advanced. |
 | **Track-before-detect** | `TrueTbdPmTracker` | PMB | **Soft-evidence TBD:** fused **absdiff** maps (same temporal fusion weights as the old baseline) **without** converting the full frame to a single binary mask; **local peak** proposals; PMB **likelihood** includes a **local evidence** scale factor. Compare against **Temporal-accumulation TBD (approx)** for thresholded behavior. |
 | **Temporal-accumulation TBD (approx)** | `TrackBeforeDetectTracker` | Advanced | Legacy baseline: only **`preprocess_frame`** overridden — buffers last **`tbd_window`** **absdiff** maps, fuses with **`0.6 * max + 0.4 * mean`**, then **hard thresholds** (with **`tbd_gain`**) and runs the usual **detect-then-track** pipeline. **Not** classical TBD on raw maps without thresholding. |
-| **Adaptive RFS family** | `AdaptiveRFSFamilyTracker` | PMB | **`detect_objects`**: adds **bbox** and **area** on detections (vs simpler PMB listing). **`update_components`**: **scales** accel / turn / speed gates by **`_association_scale`** (size + speed). **`prune_and_merge`** / **`get_confirmed_tracks`**: **dynamic** min track length and display confidence for fast/large components. Still the same **single-layer Bernoulli PMB** update as base PMB, **not** GLMB / LMB / full PMBM. |
+| **Adaptive RFS family** | `AdaptiveRFSFamilyTracker` | PMB | **`detect_objects`**: adds **bbox** and **area** on detections (vs simpler PMB listing). **`update_components`**: **scales** accel / turn / speed gates by **`_association_scale`** (size + speed). **`prune_and_merge`** / **`get_confirmed_tracks`**: **dynamic** min track length and display confidence for fast/large components. Still the same **single-layer Bernoulli PMB** update as base PMB, **not** GLMB / LMB; for a **mixture** over associations see **`PMBM`** (`pmbm.py`). |
 
 ### Qualitative scores in CSV/JSON
 
@@ -50,7 +56,7 @@ The columns **Noise / Motion / Clutter / Compute** (1–5) come from the static 
 ### Where to read the real algorithms
 
 - **Advanced family (baseline + six variants):** `tracking_core/advanced.py` + `tracking_core/variants.py` (classes above).
-- **PMB + adaptive RFS + true TBD:** `tracking_core/pmb.py` (`PoissonMultiBernoulliTracker`, `TrueTbdPmTracker`) + `AdaptiveRFSFamilyTracker` in `tracking_core/variants.py`.
+- **PMB + PMBM + adaptive RFS + true TBD:** `tracking_core/pmb.py` (`PoissonMultiBernoulliTracker`, `TextbookPoissonMultiBernoulliTracker`, `SparseBudgetPmTracker`, `TrueTbdPmTracker`) + `tracking_core/pmbm.py` (`PoissonMultiBernoulliMixtureTracker`) + `AdaptiveRFSFamilyTracker` in `tracking_core/variants.py`.
 - **Registry and default hyperparameters per entry:** `TRACKER_VARIANTS`, `ADVANCED_BASELINE_KWARGS`, `PMB_BASELINE_KWARGS` at the bottom of **`variants.py`**.
 
 ---
@@ -98,6 +104,7 @@ Typical preset names:
 - `field_review` - combines cleaner non-PMB settings with stronger `PMB large/fast` recall
 - `very_clean` - minimum flicker / minimum weak visible tracks
 - `aggressive_large_fast` - strongest push for large / fast PMB recall
+- `pmb_sparse_throughput` - tighter budgets / gate tuning for **PMB sparse (fast)**; set **`pmb_write_video_output`** to **false** in a custom preset copy for fastest calibration-only runs (no `output_video.mp4`)
 - `night_sky_low_snr` - dim night-sky clips with weaker signal and lower contrast
 
 You can also point to your own JSON file:
@@ -110,10 +117,16 @@ python run_tracking_comparison.py --list-presets --preset-file ".\my_presets.jso
 
 ## Run a single tracker
 
-Each launcher writes **`output_video.mp4`**, **`tracks.txt`**, and **`summary.json`** under `--output-dir`.
+Each launcher writes **`output_video.mp4`**, **`tracks.txt`**, and **`summary.json`** under `--output-dir` by default. Use **`--no-output-video`** on any launcher to skip annotated video encoding (tracking-only; `summary.json` `runtime_s` excludes encode time).
 
 ```powershell
 python run_advanced.py --input-video "D:\data\clip.mp4" --output-dir "D:\out\run1\advanced_baseline"
+```
+
+Tracking-only benchmark:
+
+```powershell
+python run_advanced.py --input-video "D:\data\clip.mp4" --output-dir "D:\out\bench" --no-output-video
 ```
 
 With a preset:
@@ -131,7 +144,10 @@ Other entry points:
 |--------|----------------|
 | `run_advanced.py` | Advanced baseline |
 | `run_pmb.py` | Current PMB |
+| `run_textbook_pmb.py` | Textbook PMB |
+| `run_pmbm.py` | PMBM |
 | `run_pmb_large_fast.py` | PMB large/fast |
+| `run_pmb_sparse_fast.py` | PMB sparse (fast) |
 | `run_imm.py` | IMM adaptive |
 | `run_jpda.py` | JPDA lite |
 | `run_mht.py` | MHT lite |
@@ -177,6 +193,18 @@ python run_tracking_comparison.py `
   --output-dir "D:\out\comparison_results"
 ```
 
+### PMB-family only (all `kind: pmb` entries)
+
+Runs **seven** pipelines that share the PMB / Bernoulli core in `tracking_core/pmb.py` or related modules (or subclasses): **Current PMB**, **Textbook PMB**, **PMBM**, **PMB large/fast**, **PMB sparse (fast)**, **Track-before-detect**, **Adaptive RFS family**. Do not pass **`--trackers`** with **`--pmb-only`**.
+
+```powershell
+python run_tracking_comparison.py `
+  --input-video "D:\data\clip.mp4" `
+  --pmb-only `
+  --output-dir "D:\out\comparison_results" `
+  --run-name pmb_compare
+```
+
 ### Named run folder
 
 By default a timestamped subfolder is created under `--output-dir`. Fix the name with **`--run-name`**:
@@ -196,12 +224,14 @@ By default a timestamped subfolder is created under `--output-dir`. Fix the name
 | `--output-dir PATH` | Root for outputs; default: `comparison_results` under the repo. |
 | `--run-name NAME` | Subfolder under `--output-dir`; default: `run_YYYYMMDD_HHMMSS`. |
 | `--trackers NAME ...` | Which trackers to run; default: all. |
+| `--pmb-only` | Run only trackers with `kind: pmb` in the registry (seven algorithms). Mutually exclusive with `--trackers`. |
 | `--list-trackers` | Print names and exit (no video needed). |
 | `--list-presets` | Print available preset names and exit. |
 | `--preset NAME` | Apply a named preset from `tracker_presets.json` to tracker kwargs before the run. |
 | `--preset-file PATH` | Load presets from a custom JSON file instead of the built-in one. |
 | `--skip-run` | Write registry-based summaries only; no tracker subprocesses. |
 | `--no-comparison-videos` | Skip `comparison_grid.mp4` and `comparison_with_original.mp4`. |
+| `--no-output-video` | Each child tracker skips `output_video.mp4`; **`Runtime (s)` is tracking-only** (no per-tracker encode). Comparison montages need real videos, so grids are skipped unless you rerun without this flag. |
 | `--capture-output` | Buffer child stdout/stderr and print after each tracker (no live stream). **Default** is live streaming to your terminal. |
 
 Child processes run with **`PYTHONUNBUFFERED=1`** so frame progress appears sooner.
@@ -221,7 +251,7 @@ After a comparison, you get a run directory:
 ├── comparison_grid.mp4             # Horizontal strip of tracker outputs only (≥2 successes)
 ├── comparison_with_original.mp4    # Raw input on top + tracker overlays in a grid below (≥2 successes)
 ├── advanced_baseline/
-│   ├── output_video.mp4
+│   ├── output_video.mp4            # omitted if `--no-output-video` was used
 │   ├── tracks.txt
 │   └── summary.json
 ├── pmb_baseline/
@@ -246,7 +276,7 @@ The CSV/JSON include both **fixed qualitative scores** (noise / motion / clutter
 | `ModuleNotFoundError: No module named 'cv2'` | `python -m pip install -r requirements.txt` using the **same** `python` you use to run scripts. |
 | `py` is not recognized | Use `python` instead of `py`. |
 | No video picked from `--input-dir` | Ensure at least one `.mp4` is **in that folder** (not only in subfolders), or use `--input-video`. |
-| Comparison videos missing | Need **at least two** trackers with status **ok** and valid `output_video.mp4`. Use `--no-comparison-videos` only if you want to skip them. |
+| Comparison videos missing | Need **at least two** trackers with status **ok** and valid `output_video.mp4`. If you used **`--no-output-video`**, per-tracker MP4s are not written, so montages cannot be built (expected). Use `--no-comparison-videos` when benchmarking without video. |
 | No live progress | Remove `--capture-output` if you added it; run in Cursor/VS Code terminal or PowerShell. |
 
 ---
@@ -255,7 +285,7 @@ The CSV/JSON include both **fixed qualitative scores** (noise / motion / clutter
 
 - **Registry and baseline kwargs:** `tracking_core/variants.py` (`TRACKER_VARIANTS`, `ADVANCED_BASELINE_KWARGS`, `PMB_BASELINE_KWARGS`).
 - **Advanced family implementation:** `tracking_core/advanced.py`.
-- **PMB / Bernoulli:** `tracking_core/pmb.py`.
+- **PMB / Bernoulli / PMBM:** `tracking_core/pmb.py`, `tracking_core/pmbm.py`.
 - **Comparison montage codec/layout:** `tracking_core/comparison_video.py`.
 
 After changing the registry, keep **`TRACKER_SCRIPT_BY_NAME`** in `run_tracking_comparison.py` in sync if you add new named scripts.

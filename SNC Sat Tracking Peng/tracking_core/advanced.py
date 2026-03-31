@@ -1,3 +1,5 @@
+import time
+
 import cv2
 import numpy as np
 from collections import defaultdict, deque
@@ -186,6 +188,10 @@ class AdvancedSatelliteTracker:
         # === QUALITY CONTROL ===
         min_detection_confidence=0.15,
         min_display_confidence=0.5,  # ★ ADD THIS LINE
+        # Optional: relax physics checks for dense / jittery clips (presets can override)
+        valid_track_innovation_cap=15.0,
+        valid_track_smoothness_floor=0.35,
+        valid_track_require_direction_check=True,
         # === FRAME RANGE ===
         start_frame=0,
         end_frame=None,
@@ -194,7 +200,8 @@ class AdvancedSatelliteTracker:
         save_track_log=True,
         track_log_path=None,
         show_binary=False,
-        verbose=True
+        verbose=True,
+        write_video_output=True,
     ):
         # Paths
         self.input_video_path = input_video_path
@@ -241,7 +248,10 @@ class AdvancedSatelliteTracker:
         # Quality
         self.min_detection_confidence = min_detection_confidence
         self.min_display_confidence = min_display_confidence  # ★ ADD THIS LINE # ★ ADD THIS LINE
-        
+        self.valid_track_innovation_cap = float(valid_track_innovation_cap)
+        self.valid_track_smoothness_floor = float(valid_track_smoothness_floor)
+        self.valid_track_require_direction_check = bool(valid_track_require_direction_check)
+
         # Frame range
         self.start_frame = start_frame
         self.end_frame = end_frame
@@ -253,7 +263,8 @@ class AdvancedSatelliteTracker:
         else:
             self.track_log_path = track_log_path
         self.show_binary = show_binary
-        
+        self.write_video_output = bool(write_video_output)
+
         # Internal state
         self.track_history = defaultdict(lambda: deque(maxlen=track_history_length))
         self.track_colors = defaultdict(lambda: deque(maxlen=track_history_length))
@@ -801,19 +812,20 @@ class AdvancedSatelliteTracker:
             kf = self.kalman_filters[track_id]
             if len(kf.innovation_history) >= 5:
                 avg_innovation = np.mean(kf.innovation_history)
-                if avg_innovation > 15.0:  # Poor predictions = bad track
+                if avg_innovation > self.valid_track_innovation_cap:
                     return False
         
         # 4. Trajectory smoothness check
         if track_id in self.track_history and len(self.track_history[track_id]) >= 4:
             smoothness = self.calculate_trajectory_smoothness(track_id)
-            if smoothness < 0.35:  # Reject jumpy trajectories
+            if smoothness < self.valid_track_smoothness_floor:
                 return False
         
         # 5. Direction consistency check
-        if track_id in self.track_history and len(self.track_history[track_id]) >= 5:
-            if not self.check_direction_consistency(track_id):
-                return False
+        if self.valid_track_require_direction_check:
+            if track_id in self.track_history and len(self.track_history[track_id]) >= 5:
+                if not self.check_direction_consistency(track_id):
+                    return False
         
         # 6. Motion requirement (must be moving)
         if track_id in self.kalman_filters:
@@ -991,7 +1003,10 @@ class AdvancedSatelliteTracker:
             print("🛰️  ADVANCED SATELLITE TRACKING SYSTEM")
             print("=" * 80)
             print(f"\n📹 Input:  {self.input_video_path}")
-            print(f"📹 Output: {self.output_video_path}")
+            if self.write_video_output:
+                print(f"📹 Output: {self.output_video_path}")
+            else:
+                print("📹 Output video: disabled (tracking-only)")
             
         # Load video
         cap = cv2.VideoCapture(self.input_video_path)
@@ -1044,12 +1059,14 @@ class AdvancedSatelliteTracker:
             print(f"   Temporal smoothing:       {self.use_temporal_smoothing}")
             print("=" * 80)
         
-        # Setup video writer
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        if self.show_binary:
-            out = cv2.VideoWriter(self.output_video_path, fourcc, fps, (width * 3, height))
-        else:
-            out = cv2.VideoWriter(self.output_video_path, fourcc, fps, (width * 2, height))
+        # Setup video writer (optional for benchmark / tracking-only runs)
+        out = None
+        if self.write_video_output:
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            if self.show_binary:
+                out = cv2.VideoWriter(self.output_video_path, fourcc, fps, (width * 3, height))
+            else:
+                out = cv2.VideoWriter(self.output_video_path, fourcc, fps, (width * 2, height))
         
         # Reopen for processing
         cap = cv2.VideoCapture(self.input_video_path)
@@ -1060,7 +1077,10 @@ class AdvancedSatelliteTracker:
         
         if self.verbose:
             print("\n🎬 Processing frames...")
-        
+
+        video_encode_s = 0.0
+        loop_t0 = time.perf_counter()
+
         for i, gray_frame in enumerate(frames_to_process):
             ret, original_frame = cap.read()
             if not ret:
@@ -1117,16 +1137,16 @@ class AdvancedSatelliteTracker:
                             'intensity': intensity
                         })
             
-            # Annotate
-            annotated = self.annotate_frame(original_frame, tracks)
-            
-            # Output
-            if self.show_binary:
-                binary_colored = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
-                side_by_side = np.hstack([original_frame, binary_colored, annotated])
-            else:
-                side_by_side = np.hstack([original_frame, annotated])
-            out.write(side_by_side)
+            if out is not None:
+                ve0 = time.perf_counter()
+                annotated = self.annotate_frame(original_frame, tracks)
+                if self.show_binary:
+                    binary_colored = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+                    side_by_side = np.hstack([original_frame, binary_colored, annotated])
+                else:
+                    side_by_side = np.hstack([original_frame, annotated])
+                out.write(side_by_side)
+                video_encode_s += time.perf_counter() - ve0
             
             # Progress
             if self.verbose and ((i + 1) % 100 == 0 or i == len(frames_to_process) - 1):
@@ -1137,12 +1157,15 @@ class AdvancedSatelliteTracker:
                       f"Detections: {len(detections)}")
         
         cap.release()
-        out.release()
-        
-        # Save log
+        if out is not None:
+            out.release()
+
         if self.save_track_log_enabled and track_log:
             self.save_track_log(track_log)
-        
+
+        loop_end = time.perf_counter()
+        runtime_s = max(0.0, loop_end - loop_t0 - video_encode_s)
+
         # Summary
         unique_tracks = len(self.track_history)
         unique_logged = len(set(e['track_id'] for e in track_log)) if track_log else 0
@@ -1154,13 +1177,21 @@ class AdvancedSatelliteTracker:
             print(f"   Unique tracks:     {unique_tracks}")
             print(f"   Valid tracks:      {unique_logged}")
             print(f"   Log entries:       {len(track_log)}")
-            print(f"   Output saved:      {self.output_video_path}")
+            if self.write_video_output:
+                print(f"   Output saved:      {self.output_video_path}")
+                if video_encode_s > 0:
+                    print(
+                        f"   Timing:            tracking {runtime_s:.2f}s, "
+                        f"video encode {video_encode_s:.2f}s (excluded from runtime_s)"
+                    )
             print("=" * 80)
-        
+
         return {
             'frames_processed': len(frames_to_process),
             'total_detections': total_detections,
             'unique_tracks': unique_tracks,
             'valid_tracks': unique_logged,
-            'log_entries': len(track_log)
+            'log_entries': len(track_log),
+            'runtime_s': round(runtime_s, 2),
+            'video_encode_runtime_s': round(video_encode_s, 2),
         }

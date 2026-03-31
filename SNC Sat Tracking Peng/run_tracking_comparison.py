@@ -27,7 +27,10 @@ WORKSPACE = Path(__file__).resolve().parent
 TRACKER_SCRIPT_BY_NAME: dict[str, str] = {
     "Advanced baseline": "run_advanced.py",
     "Current PMB": "run_pmb.py",
+    "Textbook PMB": "run_textbook_pmb.py",
+    "PMBM": "run_pmbm.py",
     "PMB large/fast": "run_pmb_large_fast.py",
+    "PMB sparse (fast)": "run_pmb_sparse_fast.py",
     "IMM adaptive": "run_imm.py",
     "JPDA lite": "run_jpda.py",
     "MHT lite": "run_mht.py",
@@ -79,6 +82,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Tracker names to run (default: all). Use --list-trackers for names.",
     )
+    p.add_argument(
+        "--pmb-only",
+        action="store_true",
+        help="Run every tracker with kind 'pmb' only (Current PMB, Textbook PMB, PMBM, PMB large/fast, "
+        "PMB sparse (fast), Track-before-detect, Adaptive RFS family). Cannot combine with --trackers.",
+    )
     p.add_argument("--list-trackers", action="store_true", help="List tracker names and exit.")
     p.add_argument("--list-presets", action="store_true", help="List available preset names and exit.")
     p.add_argument("--preset", type=str, default=None, help="Preset name from tracker_presets.json")
@@ -92,6 +101,12 @@ def parse_args() -> argparse.Namespace:
         "--no-comparison-videos",
         action="store_true",
         help="Skip writing comparison_grid.mp4 and comparison_with_original.mp4.",
+    )
+    p.add_argument(
+        "--no-output-video",
+        action="store_true",
+        help="Each tracker skips annotated output_video.mp4. When video is written, Runtime (s) is tracking-only; "
+        "see Video encode (s) in the CSV.",
     )
     p.add_argument(
         "--capture-output",
@@ -139,6 +154,11 @@ def select_specs(tracker_names: list[str] | None) -> list[dict[str, Any]]:
             + ". Use --list-trackers to inspect valid names."
         )
     return [mapping[n] for n in tracker_names]
+
+
+def pmb_tracker_names() -> list[str]:
+    """Registry order: all entries with kind == 'pmb' (Poisson-multi-Bernoulli family pipeline)."""
+    return [spec["name"] for spec in _load_variants_registry() if spec.get("kind") == "pmb"]
 
 
 def save_rows_csv(rows: list[dict[str, Any]], path: Path) -> None:
@@ -289,6 +309,7 @@ def run_subprocess_tracker(
     capture_output: bool = False,
     preset_name: str | None = None,
     preset_file: Path | None = None,
+    no_output_video: bool = False,
 ) -> subprocess.CompletedProcess[str | None]:
     script_path = WORKSPACE / script_name
     cmd = [
@@ -303,6 +324,8 @@ def run_subprocess_tracker(
         cmd.extend(["--preset", preset_name])
     if preset_file:
         cmd.extend(["--preset-file", str(preset_file.resolve())])
+    if no_output_video:
+        cmd.append("--no-output-video")
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     if capture_output:
@@ -329,6 +352,7 @@ def build_row_from_spec(spec: dict[str, Any], summary: dict[str, Any] | None, pr
         "Notes": spec["notes"],
         "Status": "pending",
         "Runtime (s)": None,
+        "Video encode (s)": None,
         "Frames": None,
         "Detections": None,
         "Tracks": None,
@@ -340,6 +364,7 @@ def build_row_from_spec(spec: dict[str, Any], summary: dict[str, Any] | None, pr
         if st == "ok":
             row["Status"] = "ok"
             row["Runtime (s)"] = summary.get("runtime_s")
+            row["Video encode (s)"] = summary.get("video_encode_runtime_s")
             row["Frames"] = summary.get("frames_processed")
             row["Detections"] = summary.get("total_detections")
             row["Tracks"] = summary.get("tracks_metric")
@@ -363,12 +388,14 @@ def write_manifest(
     *,
     preset_name: str | None = None,
     preset_file: str | None = None,
+    no_output_video: bool = False,
 ) -> None:
     manifest = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "pipeline": "terminal_subprocess",
         "workspace": str(WORKSPACE),
         "input_video": input_video,
+        "no_output_video": no_output_video,
         "preset_name": preset_name,
         "preset_file": preset_file,
         "summary_csv": str(run_dir / "comparison_summary.csv"),
@@ -409,8 +436,17 @@ def main() -> int:
     if args.input_video is None and args.input_dir is not None:
         print(f"Using first video in folder (sorted by name): {video_path}")
 
+    if args.pmb_only and args.trackers:
+        print("Cannot use --pmb-only together with --trackers.", file=sys.stderr)
+        return 2
+
+    tracker_names_arg: list[str] | None = args.trackers
+    if args.pmb_only:
+        tracker_names_arg = pmb_tracker_names()
+        print(f"PMB-only comparison: {len(tracker_names_arg)} trackers — {', '.join(tracker_names_arg)}")
+
     try:
-        selected = select_specs(args.trackers)
+        selected = select_specs(tracker_names_arg)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -457,6 +493,7 @@ def main() -> int:
             capture_output=args.capture_output,
             preset_name=args.preset,
             preset_file=args.preset_file,
+            no_output_video=args.no_output_video,
         )
         wall = round(time.perf_counter() - t0, 2)
         if args.capture_output:
@@ -487,6 +524,7 @@ def main() -> int:
         rows,
         preset_name=args.preset,
         preset_file=str(args.preset_file.resolve()) if args.preset_file else None,
+        no_output_video=args.no_output_video,
     )
 
     if not args.skip_run and not args.no_comparison_videos and len(ok_videos) >= 2:

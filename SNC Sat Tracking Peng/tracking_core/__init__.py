@@ -1,7 +1,14 @@
 """Satellite tracking core: PMB, adaptive advanced tracker, and variant registry."""
 
 from tracking_core.advanced import AdaptiveKalmanFilter2D, AdvancedSatelliteTracker
-from tracking_core.pmb import BernoulliComponent, PoissonMultiBernoulliTracker, TrueTbdPmTracker
+from tracking_core.pmb import (
+    BernoulliComponent,
+    PoissonMultiBernoulliTracker,
+    SparseBudgetPmTracker,
+    TextbookPoissonMultiBernoulliTracker,
+    TrueTbdPmTracker,
+)
+from tracking_core.pmbm import PoissonMultiBernoulliMixtureTracker
 from tracking_core.variants import (
     TRACKER_VARIANTS,
     AdaptiveRFSFamilyTracker,
@@ -20,7 +27,10 @@ __all__ = [
     "AdvancedSatelliteTracker",
     "BernoulliComponent",
     "PoissonMultiBernoulliTracker",
+    "SparseBudgetPmTracker",
+    "TextbookPoissonMultiBernoulliTracker",
     "TrueTbdPmTracker",
+    "PoissonMultiBernoulliMixtureTracker",
     "TRACKER_VARIANTS",
     "IMMAdaptiveMotionTracker",
     "JPDALiteTracker",

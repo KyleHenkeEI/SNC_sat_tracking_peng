@@ -15,8 +15,11 @@ from tracking_core.advanced import AdvancedSatelliteTracker
 from tracking_core.pmb import (
     BernoulliComponent,
     PoissonMultiBernoulliTracker,
+    SparseBudgetPmTracker,
+    TextbookPoissonMultiBernoulliTracker,
     TrueTbdPmTracker,
 )
+from tracking_core.pmbm import PoissonMultiBernoulliMixtureTracker
 from tracking_core.presets import apply_preset_to_kwargs
 
 
@@ -87,6 +90,15 @@ PMB_BASELINE_KWARGS = dict(
     end_frame=None,
     save_track_log=True,
     verbose=True,
+    # Air-to-air (see AIR_TO_AIR_ADAPTATION.md); preset `air_to_air` enables for all PMB kind trackers
+    a2a_phase_stabilize=False,
+    a2a_clahe_clip_limit=0.0,
+    a2a_clahe_tile_size=8,
+    a2a_imu_json_path=None,
+    a2a_imu_apply_compensation=False,
+    a2a_imu_fx=900.0,
+    a2a_imu_fy=900.0,
+    a2a_imu_default_dt=1.0 / 30.0,
 )
 
 def _predict_active_tracks(tracker):
@@ -1226,6 +1238,34 @@ TRACKER_VARIANTS = [
         'notes': 'Canonical PMB implementation (tracking_core/pmb.py).',
     },
     {
+        'name': 'Textbook PMB',
+        'family': 'PMB',
+        'kind': 'pmb',
+        'class': TextbookPoissonMultiBernoulliTracker,
+        'output_tag': 'pmb_textbook',
+        'overrides': dict(
+            textbook_mahalanobis_gate_sq=9.21,
+            min_display_confidence=0.48,
+        ),
+        'scores': dict(noise=3, motion=3, clutter=4, compute=4),
+        'notes': 'Reference-style PMB: Mahalanobis gate, frame-scaled clutter, Hungarian assignment, Poisson-style birth r0; confidence = existence r.',
+    },
+    {
+        'name': 'PMBM',
+        'family': 'PMBM (multi-hypothesis)',
+        'kind': 'pmb',
+        'class': PoissonMultiBernoulliMixtureTracker,
+        'output_tag': 'pmbm',
+        'overrides': dict(
+            textbook_mahalanobis_gate_sq=9.21,
+            min_display_confidence=0.48,
+            pmbm_k_best=5,
+            pmbm_max_hypotheses=10,
+        ),
+        'scores': dict(noise=3, motion=3, clutter=4, compute=5),
+        'notes': 'PMBM-style log-weighted mixture over association variants (Hungarian + forced-miss branches); MAP drives overlays and track log.',
+    },
+    {
         'name': 'PMB large/fast',
         'family': 'PMB',
         'kind': 'pmb',
@@ -1249,6 +1289,29 @@ TRACKER_VARIANTS = [
         ),
         'scores': dict(noise=3, motion=5, clutter=4, compute=3),
         'notes': 'Adaptive RFS path with relaxed gates for larger / faster movers; canonical Current PMB unchanged.',
+    },
+    {
+        'name': 'PMB sparse (fast)',
+        'family': 'PMB',
+        'kind': 'pmb',
+        'class': SparseBudgetPmTracker,
+        'output_tag': 'pmb_sparse_fast',
+        'overrides': dict(
+            pmb_max_detections_per_frame=96,
+            pmb_max_live_components=140,
+            pmb_assoc_gate_pixels=50.0,
+            pmb_min_birth_intensity=34.0,
+            pmb_streaming_run=True,
+            pmb_write_video_output=True,
+            pmb_frame_scaled_clutter=True,
+            min_intensity=30,
+            pruning_threshold=0.014,
+            existence_threshold=0.52,
+            max_acceleration=14.0,
+            max_speed=280.0,
+        ),
+        'scores': dict(noise=3, motion=4, clutter=4, compute=1),
+        'notes': 'PMB-inspired greedy Bernoulli path with streaming I/O, spatial gate on likelihoods, detection/component caps, and frame-scaled clutter. Conservative reference remains Current PMB; permissive recall remains PMB large/fast.',
     },
     {
         'name': 'IMM adaptive',
@@ -1327,20 +1390,20 @@ TRACKER_VARIANTS = [
         'output_tag': 'track_before_detect',
         'overrides': dict(
             bg_threshold=10,
-            min_intensity=22,
+            min_intensity=26,
             max_acceleration=25.0,
             min_track_length=5,
-            min_display_confidence=0.72,
-            existence_threshold=0.52,
+            min_display_confidence=0.78,
+            existence_threshold=0.56,
             clutter_rate=5.5,
             detection_prob=0.80,
             tbd_window=4,
-            tbd_evidence_percentile=88.0,
-            tbd_evidence_floor=1.6,
-            tbd_peak_min_distance=6,
-            tbd_soft_likelihood_gain=1.2,
+            tbd_evidence_percentile=91.0,
+            tbd_evidence_floor=2.0,
+            tbd_peak_min_distance=8,
+            tbd_soft_likelihood_gain=1.05,
             tbd_local_patch_radius=2,
-            tbd_max_proposals_per_frame=20,
+            tbd_max_proposals_per_frame=14,
         ),
         'scores': dict(noise=5, motion=4, clutter=4, compute=4),
         'notes': 'True TBD-style: fused residual map (no global binary mask); PMB updates with soft local evidence.',
@@ -1387,6 +1450,7 @@ def instantiate_tracker(
     *,
     preset_name: str | None = None,
     preset_file: str | Path | None = None,
+    extra_kwargs: dict | None = None,
 ) -> object:
     """Build a tracker; writes to tracker_output_dir/output_video.mp4 and tracks.txt."""
     tracker_output_dir = Path(tracker_output_dir)
@@ -1402,6 +1466,8 @@ def instantiate_tracker(
         preset_name=preset_name,
         preset_file=preset_file,
     )
+    if extra_kwargs:
+        kwargs.update(extra_kwargs)
     kwargs["input_video_path"] = input_video
     kwargs["output_video_path"] = video_path
     kwargs["track_log_path"] = log_path
@@ -1447,7 +1513,10 @@ def compare_trackers(
                 result = tracker.run()
                 elapsed = time.perf_counter() - start_time
                 row["Status"] = "ok"
-                row["Runtime (s)"] = round(elapsed, 2)
+                tr = result.get("runtime_s")
+                row["Runtime (s)"] = (
+                    round(float(tr), 2) if tr is not None else round(elapsed, 2)
+                )
                 row["Frames"] = result.get("frames_processed", float("nan"))
                 row["Detections"] = result.get("total_detections", float("nan"))
                 row["Tracks"] = result.get(
