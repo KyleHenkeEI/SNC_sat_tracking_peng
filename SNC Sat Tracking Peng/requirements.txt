@@ -3,3 +3,4 @@ opencv-python<4.13
 scipy
 scikit-learn
 matplotlib
+Pillow

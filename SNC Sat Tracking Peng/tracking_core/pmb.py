@@ -29,11 +29,12 @@ class BernoulliComponent:
     """
     Enhanced Bernoulli component with physical constraints.
     """
-    def __init__(self, existence_prob, state, covariance, track_id=None):
+    def __init__(self, existence_prob, state, covariance, track_id=None, process_noise_q=8.0):
         self.r = existence_prob  # Probability of existence
         self.state = state.copy()  # [x, y, vx, vy]
         self.P = covariance.copy()  # State covariance
         self.track_id = track_id
+        self.process_noise_q = float(process_noise_q)
         self.history = deque(maxlen=50)
         self.age = 0
         self.detection_count = 0
@@ -55,7 +56,7 @@ class BernoulliComponent:
         
         self.H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=np.float64)
         
-        q = 8.0  # Process noise
+        q = self.process_noise_q
         self.Q = np.array([
             [q*dt**4/4, 0, q*dt**3/2, 0],
             [0, q*dt**4/4, 0, q*dt**3/2],
@@ -100,8 +101,9 @@ class BernoulliComponent:
         else:
             self.avg_intensity = 0.9 * self.avg_intensity + 0.1 * intensity
         
-        # Update max displacement
         current_pos = self.state[:2]
+        self.history.append(current_pos.copy())
+
         displacement = np.linalg.norm(current_pos - self.first_position)
         self.max_displacement = max(self.max_displacement, displacement)
         
@@ -143,38 +145,53 @@ class BernoulliComponent:
     
     def check_physical_constraints(self, new_measurement, max_acceleration=30.0, 
                                    max_direction_change=70.0, max_speed=100.0):
-        """Check if association violates physical constraints."""
-        if self.detection_count < 2:
-            return True
-        
+        """Check if association violates physical constraints.
+
+        Direction is checked over a 3-position window (history[-3] -> new_measurement)
+        to smooth out single-frame measurement jitter.
+        """
         new_pos = np.array([new_measurement[0], new_measurement[1]], dtype=np.float64)
         current_pos = self.state[:2]
-        current_vel = self.state[2:]
-        current_speed = self.get_speed()
-        
-        # Calculate implied velocity
         new_vel = new_pos - current_pos
         new_speed = np.linalg.norm(new_vel)
-        
-        # Check 1: Speed limit
+
         if new_speed > max_speed:
             return False
-        
-        # Check 2: Acceleration constraint (for established tracks)
-        if self.consecutive_detections >= 3 and current_speed > 0.5:
+
+        if self.detection_count < 1:
+            return True
+
+        current_vel = self.state[2:]
+        current_speed = self.get_speed()
+
+        if self.detection_count >= 3 and current_speed > 0.5:
             accel = np.linalg.norm(new_vel - current_vel)
             if accel > max_acceleration:
                 return False
-        
-        # Check 3: Direction consistency (for fast-moving tracks)
-        if self.consecutive_detections >= 3 and current_speed > 2.0 and new_speed > 2.0:
-            cos_angle = np.dot(current_vel, new_vel) / (current_speed * new_speed + 1e-6)
-            cos_angle = np.clip(cos_angle, -1.0, 1.0)
-            angle_diff = np.arccos(cos_angle)
-            
-            if angle_diff > np.radians(max_direction_change):
-                return False
-        
+
+        if len(self.history) >= 3:
+            old_pos = self.history[-3]
+            multi_vel = new_pos - old_pos
+            multi_speed = np.linalg.norm(multi_vel)
+            past_vel = current_pos - old_pos
+            past_speed = np.linalg.norm(past_vel)
+            if past_speed > 0.3 and multi_speed > 0.3:
+                cos_angle = np.dot(past_vel, multi_vel) / (past_speed * multi_speed + 1e-6)
+                cos_angle = np.clip(cos_angle, -1.0, 1.0)
+                angle_diff = np.arccos(cos_angle)
+                if angle_diff > np.radians(max_direction_change):
+                    return False
+        elif len(self.history) >= 1:
+            old_pos = self.history[-1]
+            past_vel = current_pos - old_pos
+            past_speed = np.linalg.norm(past_vel)
+            if past_speed > 0.5 and new_speed > 0.5:
+                cos_angle = np.dot(past_vel, new_vel) / (past_speed * new_speed + 1e-6)
+                cos_angle = np.clip(cos_angle, -1.0, 1.0)
+                angle_diff = np.arccos(cos_angle)
+                if angle_diff > np.radians(max_direction_change):
+                    return False
+
         return True
     
     def likelihood(self, measurement):
@@ -211,6 +228,7 @@ class PoissonMultiBernoulliTracker:
         min_detection_area=1,
         max_detection_area=300,
         min_intensity=25,
+        max_intensity=None,
         
         # === PMB PARAMETERS ===
         birth_rate=0.1,
@@ -219,6 +237,8 @@ class PoissonMultiBernoulliTracker:
         clutter_rate=5.0,
         existence_threshold=0.5,
         pruning_threshold=0.01,
+        process_noise_q=8.0,
+        min_association_r=0.1,
         
         # === PHYSICAL CONSTRAINTS ===
         max_acceleration=30.0,
@@ -273,6 +293,7 @@ class PoissonMultiBernoulliTracker:
         self.min_detection_area = min_detection_area
         self.max_detection_area = max_detection_area
         self.min_intensity = min_intensity
+        self.max_intensity = max_intensity
         
         # PMB parameters
         self.birth_rate = birth_rate
@@ -281,6 +302,8 @@ class PoissonMultiBernoulliTracker:
         self.clutter_rate = clutter_rate
         self.existence_threshold = existence_threshold
         self.pruning_threshold = pruning_threshold
+        self.process_noise_q = float(process_noise_q)
+        self.min_association_r = float(min_association_r)
         
         # Physical constraints
         self.max_acceleration = max_acceleration
@@ -328,6 +351,13 @@ class PoissonMultiBernoulliTracker:
         self._a2a_display_shifts: list[tuple[float, float]] = []
         self.a2a_run_summary: dict = {}
         
+    def _clutter_intensity(self) -> float:
+        """Per-pixel clutter density scaled to actual frame dimensions."""
+        if self.background is not None:
+            h, w = self.background.shape[:2]
+            return self.clutter_rate / float(max(1, h * w))
+        return self.clutter_rate / (128.0 * 128.0)
+
     def compute_background(self, frames):
         """Compute background model."""
         if self.verbose:
@@ -409,7 +439,7 @@ class PoissonMultiBernoulliTracker:
         if len(coords) == 1:
             x, y = coords[0]
             intensity = float(original_frame[y, x])
-            if intensity >= self.min_intensity:
+            if intensity >= self.min_intensity and (self.max_intensity is None or intensity <= self.max_intensity):
                 detections.append({
                     'centroid': (x, y),
                     'intensity': intensity
@@ -438,7 +468,7 @@ class PoissonMultiBernoulliTracker:
                     intensities = [float(original_frame[y, x]) for x, y in cluster_coords]
                     max_intensity = np.max(intensities)
                     
-                    if max_intensity >= self.min_intensity:
+                    if max_intensity >= self.min_intensity and (self.max_intensity is None or max_intensity <= self.max_intensity):
                         detections.append({
                             'centroid': (cx, cy),
                             'intensity': max_intensity
@@ -459,12 +489,11 @@ class PoissonMultiBernoulliTracker:
         n_detections = len(detections)
         
         if n_components == 0:
-            # All detections are births
             for det in detections:
                 pos = det['centroid']
                 state = np.array([pos[0], pos[1], 0.0, 0.0], dtype=np.float64)
                 P = np.eye(4, dtype=np.float64) * 100.0
-                component = BernoulliComponent(0.1, state, P, track_id=None)
+                component = BernoulliComponent(0.1, state, P, track_id=None, process_noise_q=self.process_noise_q)
                 self.bernoulli_components.append(component)
             return
         
@@ -494,7 +523,7 @@ class PoissonMultiBernoulliTracker:
                     likelihood_matrix[i, j] = 1e-10
         
         # Data association
-        clutter_intensity = self.clutter_rate / (128 * 128)
+        clutter_intensity = self._clutter_intensity()
         
         updated_components = []
         used_detections = set()
@@ -520,12 +549,11 @@ class PoissonMultiBernoulliTracker:
                           (self.detection_prob * component.r * likelihood + 
                            clutter_intensity * (1 - component.r) + 1e-10)
                 
-                if r_update > best_r and r_update > 0.1:
+                if r_update > best_r and r_update > self.min_association_r:
                     best_r = r_update
                     best_j = j
             
             if best_j >= 0:
-                # Associated with detection
                 component_copy = deepcopy(component)
                 component_copy.update(detections[best_j]['centroid'], 
                                      detections[best_j]['intensity'])
@@ -536,13 +564,12 @@ class PoissonMultiBernoulliTracker:
                 # Missed detection
                 updated_components.append(best_component)
         
-        # Unassociated detections become births
         for j, det in enumerate(detections):
             if j not in used_detections:
                 pos = det['centroid']
                 state = np.array([pos[0], pos[1], 0.0, 0.0], dtype=np.float64)
                 P = np.eye(4, dtype=np.float64) * 100.0
-                component = BernoulliComponent(0.15, state, P, track_id=None)
+                component = BernoulliComponent(0.15, state, P, track_id=None, process_noise_q=self.process_noise_q)
                 component.update(pos, det['intensity'])
                 updated_components.append(component)
         
@@ -597,43 +624,40 @@ class PoissonMultiBernoulliTracker:
         return tracks
     
     def confidence_to_color(self, confidence):
-        """Convert confidence to BGR color."""
-        confidence = max(0.0, min(1.0, confidence))
-        if confidence < 0.5:
-            t = confidence * 2
-            return (0, int(255 * t), 255)  # Red -> Yellow
-        else:
-            t = (confidence - 0.5) * 2
-            return (0, 255, int(255 * (1 - t)))  # Yellow -> Green
+        """Red (0.75) -> Yellow (mid) -> Green (1.0) in BGR."""
+        lo, hi = 0.75, 1.0
+        frac = max(0.0, min(1.0, (confidence - lo) / max(1e-9, hi - lo)))
+        if frac < 0.5:
+            t = frac * 2.0
+            return (0, int(255 * t), 255)
+        t = (frac - 0.5) * 2.0
+        return (0, 255, int(255 * (1.0 - t)))
     
     def annotate_frame(self, frame, tracks):
-        """Annotate frame with tracks."""
+        """Annotate frame with tracks (only >= 0.75 confidence)."""
         annotated = frame.copy()
         if len(annotated.shape) == 2:
             annotated = cv2.cvtColor(annotated, cv2.COLOR_GRAY2BGR)
         
         for track in tracks:
+            confidence = track['confidence']
+            if confidence < 0.75:
+                continue
+
             track_id = track['id']
             centroid = track['centroid']
-            confidence = track['confidence']
-            
             color = self.confidence_to_color(confidence)
             
-            # Store history
             self.track_history[track_id].append(centroid)
             self.track_colors[track_id].append(color)
             
-            # Draw trajectory
             if len(self.track_history[track_id]) > 1:
                 points = list(self.track_history[track_id])
                 colors = list(self.track_colors[track_id])
                 for i in range(len(points) - 1):
                     cv2.line(annotated, points[i], points[i + 1], colors[i + 1], 1)
             
-            # Draw centroid
             cv2.circle(annotated, centroid, 2, color, -1)
-            
-            # Draw bounding box
             cv2.rectangle(annotated, (centroid[0]-3, centroid[1]-3),
                          (centroid[0]+3, centroid[1]+3), color, 1)
         
@@ -924,7 +948,7 @@ class TextbookPoissonMultiBernoulliTracker(PoissonMultiBernoulliTracker):
                 pos = det["centroid"]
                 state = np.array([pos[0], pos[1], 0.0, 0.0], dtype=np.float64)
                 P = np.eye(4, dtype=np.float64) * 100.0
-                born = BernoulliComponent(r0, state, P, track_id=None)
+                born = BernoulliComponent(r0, state, P, track_id=None, process_noise_q=self.process_noise_q)
                 born.update(pos, det.get("intensity", 0.0))
                 self.bernoulli_components.append(born)
             return
@@ -995,7 +1019,7 @@ class TextbookPoissonMultiBernoulliTracker(PoissonMultiBernoulliTracker):
             pos = det["centroid"]
             state = np.array([pos[0], pos[1], 0.0, 0.0], dtype=np.float64)
             P = np.eye(4, dtype=np.float64) * 100.0
-            born = BernoulliComponent(r0, state, P, track_id=None)
+            born = BernoulliComponent(r0, state, P, track_id=None, process_noise_q=self.process_noise_q)
             born.update(pos, det.get("intensity", 0.0))
             updated_components.append(born)
 
@@ -1051,7 +1075,7 @@ class TextbookPoissonMultiBernoulliTracker(PoissonMultiBernoulliTracker):
 def _clone_bernoulli_like(src: BernoulliComponent, r_override: float | None = None) -> BernoulliComponent:
     """Lightweight Bernoulli copy (avoids deepcopy on the hot path)."""
     r = float(src.r if r_override is None else r_override)
-    c = BernoulliComponent(r, src.state, src.P, src.track_id)
+    c = BernoulliComponent(r, src.state, src.P, src.track_id, process_noise_q=src.process_noise_q)
     c.age = src.age
     c.detection_count = src.detection_count
     c.consecutive_detections = src.consecutive_detections
@@ -1087,8 +1111,10 @@ class SparseBudgetPmTracker(PoissonMultiBernoulliTracker):
         super().__init__(**kwargs)
 
     def _clutter_intensity(self) -> float:
-        if not self.pmb_frame_scaled_clutter or self.background is None:
-            return self.clutter_rate / (128 * 128)
+        if not self.pmb_frame_scaled_clutter:
+            return super()._clutter_intensity()
+        if self.background is None:
+            return self.clutter_rate / (128.0 * 128.0)
         h, w = self.background.shape[:2]
         return self.clutter_rate / float(max(1, h * w))
 
@@ -1119,7 +1145,7 @@ class SparseBudgetPmTracker(PoissonMultiBernoulliTracker):
                 pos = det["centroid"]
                 state = np.array([pos[0], pos[1], 0.0, 0.0], dtype=np.float64)
                 P = np.eye(4, dtype=np.float64) * 100.0
-                component = BernoulliComponent(0.1, state, P, track_id=None)
+                component = BernoulliComponent(0.1, state, P, track_id=None, process_noise_q=self.process_noise_q)
                 self.bernoulli_components.append(component)
             return
 
@@ -1172,7 +1198,7 @@ class SparseBudgetPmTracker(PoissonMultiBernoulliTracker):
                     + clutter_intensity * (1 - component.r)
                     + 1e-10
                 )
-                if r_update > best_r and r_update > 0.1:
+                if r_update > best_r and r_update > self.min_association_r:
                     best_r = r_update
                     best_j = j
 
@@ -1193,7 +1219,7 @@ class SparseBudgetPmTracker(PoissonMultiBernoulliTracker):
             pos = det["centroid"]
             state = np.array([pos[0], pos[1], 0.0, 0.0], dtype=np.float64)
             P = np.eye(4, dtype=np.float64) * 100.0
-            born = BernoulliComponent(0.15, state, P, track_id=None)
+            born = BernoulliComponent(0.15, state, P, track_id=None, process_noise_q=self.process_noise_q)
             born.update(pos, det["intensity"])
             updated_components.append(born)
 
@@ -1585,7 +1611,7 @@ class TrueTbdPmTracker(PoissonMultiBernoulliTracker):
                 pos = det['centroid']
                 state = np.array([pos[0], pos[1], 0.0, 0.0], dtype=np.float64)
                 P = np.eye(4, dtype=np.float64) * 100.0
-                component = BernoulliComponent(0.1, state, P, track_id=None)
+                component = BernoulliComponent(0.1, state, P, track_id=None, process_noise_q=self.process_noise_q)
                 self.bernoulli_components.append(component)
             return
 
@@ -1613,7 +1639,7 @@ class TrueTbdPmTracker(PoissonMultiBernoulliTracker):
                     valid_associations[i, j] = False
                     likelihood_matrix[i, j] = 1e-10
 
-        clutter_intensity = self.clutter_rate / (128 * 128)
+        clutter_intensity = self._clutter_intensity()
         updated_components = []
         used_detections = set()
 
@@ -1634,7 +1660,7 @@ class TrueTbdPmTracker(PoissonMultiBernoulliTracker):
                     + clutter_intensity * (1 - component.r)
                     + 1e-10
                 )
-                if r_update > best_r and r_update > 0.1:
+                if r_update > best_r and r_update > self.min_association_r:
                     best_r = r_update
                     best_j = j
 
@@ -1652,7 +1678,7 @@ class TrueTbdPmTracker(PoissonMultiBernoulliTracker):
                 pos = det['centroid']
                 state = np.array([pos[0], pos[1], 0.0, 0.0], dtype=np.float64)
                 P = np.eye(4, dtype=np.float64) * 100.0
-                component = BernoulliComponent(0.15, state, P, track_id=None)
+                component = BernoulliComponent(0.15, state, P, track_id=None, process_noise_q=self.process_noise_q)
                 component.update(pos, det['intensity'])
                 updated_components.append(component)
 

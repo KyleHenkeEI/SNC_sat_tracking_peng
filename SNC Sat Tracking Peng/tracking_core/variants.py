@@ -785,7 +785,7 @@ class AdaptiveRFSFamilyTracker(PoissonMultiBernoulliTracker):
                     valid_associations[i, j] = False
                     likelihood_matrix[i, j] = 1e-10
 
-        clutter_intensity = self.clutter_rate / (128 * 128)
+        clutter_intensity = self._clutter_intensity()
         updated_components = []
         used_detections = set()
 
@@ -1078,7 +1078,7 @@ class PmbLargeFastTracker(AdaptiveRFSFamilyTracker):
                     valid_associations[i, j] = False
                     likelihood_matrix[i, j] = 1e-10
 
-        clutter_intensity = self.clutter_rate / (128 * 128)
+        clutter_intensity = self._clutter_intensity()
         updated_components = []
         used_detections = set()
 
@@ -1338,10 +1338,15 @@ TRACKER_VARIANTS = [
         'class': JPDALiteTracker,
         'output_tag': 'jpda_lite',
         'overrides': dict(
-            max_distance=24,
-            mahalanobis_threshold=3.6,
-            min_display_confidence=0.58,
-            min_track_length=4,
+            max_distance=22,
+            max_acceleration=15.0,
+            max_direction_change=20.0,
+            max_speed=120.0,
+            mahalanobis_threshold=3.2,
+            min_display_confidence=0.80,
+            min_track_length=5,
+            bg_threshold=10,
+            min_intensity=26,
             jpda_temperature=0.55,
             jpda_margin=0.45,
             jpda_max_soft_neighbors=1,
@@ -1358,8 +1363,13 @@ TRACKER_VARIANTS = [
         'overrides': dict(
             track_timeout=26,
             lost_track_timeout=55,
-            min_display_confidence=0.58,
-            min_track_length=4,
+            max_acceleration=15.0,
+            max_direction_change=20.0,
+            max_speed=120.0,
+            min_display_confidence=0.80,
+            min_track_length=5,
+            bg_threshold=10,
+            min_intensity=26,
             ambiguity_margin=0.38,
         ),
         'scores': dict(noise=4, motion=4, clutter=5, compute=5),
@@ -1372,12 +1382,17 @@ TRACKER_VARIANTS = [
         'class': ParticleAssistedTracker,
         'output_tag': 'particle_assisted',
         'overrides': dict(
-            process_noise=12.0,
-            measurement_noise=2.6,
-            max_speed=90.0,
-            min_display_confidence=0.58,
-            min_track_length=4,
-            mahalanobis_threshold=3.6,
+            process_noise=10.0,
+            measurement_noise=2.0,
+            max_speed=120.0,
+            max_acceleration=15.0,
+            max_direction_change=20.0,
+            min_display_confidence=0.80,
+            min_track_length=5,
+            mahalanobis_threshold=3.2,
+            bg_threshold=10,
+            min_intensity=26,
+            particle_spread=1.5,
         ),
         'scores': dict(noise=5, motion=4, clutter=3, compute=5),
         'notes': 'Useful when centroids are noisy or streaky.',
@@ -1391,19 +1406,21 @@ TRACKER_VARIANTS = [
         'overrides': dict(
             bg_threshold=10,
             min_intensity=26,
-            max_acceleration=25.0,
+            max_acceleration=15.0,
+            max_direction_change=20.0,
+            max_speed=120.0,
             min_track_length=5,
-            min_display_confidence=0.78,
-            existence_threshold=0.56,
-            clutter_rate=5.5,
-            detection_prob=0.80,
+            min_display_confidence=0.80,
+            existence_threshold=0.55,
+            clutter_rate=5.0,
+            detection_prob=0.75,
             tbd_window=4,
-            tbd_evidence_percentile=91.0,
-            tbd_evidence_floor=2.0,
-            tbd_peak_min_distance=8,
-            tbd_soft_likelihood_gain=1.05,
+            tbd_evidence_percentile=95.0,
+            tbd_evidence_floor=2.5,
+            tbd_peak_min_distance=10,
+            tbd_soft_likelihood_gain=0.85,
             tbd_local_patch_radius=2,
-            tbd_max_proposals_per_frame=14,
+            tbd_max_proposals_per_frame=8,
         ),
         'scores': dict(noise=5, motion=4, clutter=4, compute=4),
         'notes': 'True TBD-style: fused residual map (no global binary mask); PMB updates with soft local evidence.',
