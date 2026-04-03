@@ -1,0 +1,444 @@
+{
+  "default": {
+    "description": "Use the built-in defaults from tracking_core/variants.py with no extra preset overrides."
+  },
+  "cleaner_tracks": {
+    "description": "Make the non-PMB trackers more conservative to reduce false jumps and weak visible tracks.",
+    "trackers": {
+      "Advanced baseline": {
+        "max_distance": 20,
+        "mahalanobis_threshold": 3.2,
+        "min_detection_confidence": 0.24,
+        "min_display_confidence": 0.62
+      },
+      "IMM adaptive": {
+        "mahalanobis_threshold": 3.4,
+        "max_speed": 78.0,
+        "min_detection_confidence": 0.24,
+        "min_display_confidence": 0.62
+      },
+      "JPDA lite": {
+        "jpda_margin": 0.32,
+        "jpda_max_soft_neighbors": 1,
+        "min_display_confidence": 0.64
+      },
+      "MHT lite": {
+        "ambiguity_margin": 0.26,
+        "min_display_confidence": 0.64
+      },
+      "Particle assisted": {
+        "mahalanobis_threshold": 3.3,
+        "min_display_confidence": 0.64
+      },
+      "Temporal-accumulation TBD (approx)": {
+        "max_distance": 18,
+        "min_detection_confidence": 0.26,
+        "min_display_confidence": 0.66
+      }
+    }
+  },
+  "large_fast_recall": {
+    "description": "Bias the PMB large/fast tracker toward stronger recall on obvious large or fast movers.",
+    "trackers": {
+      "PMB large/fast": {
+        "max_detection_area": 1200,
+        "max_acceleration": 28.0,
+        "existence_threshold": 0.44,
+        "min_display_confidence": 0.62,
+        "lf_bg_threshold_scale": 0.64,
+        "lf_supplement_diff_percentile": 84.0,
+        "lf_supplement_diff_floor": 2.0,
+        "lf_supplement_intensity_relax": 12,
+        "lf_strong_birth_r0": 0.42,
+        "lf_moderate_birth_r0": 0.28,
+        "lf_display_miss_grace": 7
+      }
+    }
+  },
+  "field_review": {
+    "description": "Recommended preset for full comparison review: cleaner non-PMB tracks plus stronger PMB large/fast recall.",
+    "trackers": {
+      "Advanced baseline": {
+        "max_distance": 20,
+        "mahalanobis_threshold": 3.2,
+        "min_detection_confidence": 0.24,
+        "min_display_confidence": 0.62
+      },
+      "IMM adaptive": {
+        "mahalanobis_threshold": 3.4,
+        "max_speed": 78.0,
+        "min_detection_confidence": 0.24,
+        "min_display_confidence": 0.62
+      },
+      "JPDA lite": {
+        "jpda_margin": 0.32,
+        "jpda_max_soft_neighbors": 1,
+        "min_display_confidence": 0.64
+      },
+      "MHT lite": {
+        "ambiguity_margin": 0.26,
+        "min_display_confidence": 0.64
+      },
+      "Particle assisted": {
+        "mahalanobis_threshold": 3.3,
+        "min_display_confidence": 0.64
+      },
+      "Temporal-accumulation TBD (approx)": {
+        "max_distance": 18,
+        "min_detection_confidence": 0.26,
+        "min_display_confidence": 0.66
+      },
+      "PMB large/fast": {
+        "max_detection_area": 1200,
+        "max_acceleration": 28.0,
+        "existence_threshold": 0.44,
+        "min_display_confidence": 0.62,
+        "lf_bg_threshold_scale": 0.64,
+        "lf_supplement_diff_percentile": 84.0,
+        "lf_supplement_diff_floor": 2.0,
+        "lf_supplement_intensity_relax": 12,
+        "lf_strong_birth_r0": 0.42,
+        "lf_moderate_birth_r0": 0.28,
+        "lf_display_miss_grace": 7
+      }
+    }
+  },
+  "very_clean": {
+    "description": "Favor visual stability over recall. Good when you want the least flicker and fewest weak visible tracks.",
+    "trackers": {
+      "Advanced baseline": {
+        "max_distance": 18,
+        "mahalanobis_threshold": 3.0,
+        "min_detection_confidence": 0.28,
+        "min_display_confidence": 0.68
+      },
+      "IMM adaptive": {
+        "mahalanobis_threshold": 3.2,
+        "max_speed": 72.0,
+        "min_detection_confidence": 0.28,
+        "min_display_confidence": 0.68
+      },
+      "JPDA lite": {
+        "jpda_margin": 0.24,
+        "jpda_max_soft_neighbors": 1,
+        "min_display_confidence": 0.7
+      },
+      "MHT lite": {
+        "ambiguity_margin": 0.18,
+        "min_display_confidence": 0.7
+      },
+      "Particle assisted": {
+        "mahalanobis_threshold": 3.1,
+        "min_display_confidence": 0.7
+      },
+      "Temporal-accumulation TBD (approx)": {
+        "max_distance": 16,
+        "min_detection_confidence": 0.3,
+        "min_display_confidence": 0.72
+      },
+      "Track-before-detect": {
+        "existence_threshold": 0.56,
+        "min_display_confidence": 0.78,
+        "tbd_evidence_percentile": 90.0
+      }
+    }
+  },
+  "aggressive_large_fast": {
+    "description": "Push harder for obvious large and fast movers, accepting a bit more clutter risk.",
+    "trackers": {
+      "PMB large/fast": {
+        "max_detection_area": 1600,
+        "max_acceleration": 34.0,
+        "existence_threshold": 0.4,
+        "min_display_confidence": 0.56,
+        "lf_bg_threshold_scale": 0.58,
+        "lf_supplement_diff_percentile": 80.0,
+        "lf_supplement_diff_floor": 1.8,
+        "lf_supplement_intensity_relax": 14,
+        "lf_strong_birth_r0": 0.46,
+        "lf_moderate_birth_r0": 0.32,
+        "lf_display_miss_grace": 8
+      }
+    }
+  },
+  "pmb_sparse_throughput": {
+    "description": "PMB-only calibration knobs for PMB sparse (fast): detection/birth budgets, association gate. For no-video runs, add pmb_write_video_output=false to this block in a custom preset file.",
+    "trackers": {
+      "PMB sparse (fast)": {
+        "pmb_max_detections_per_frame": 72,
+        "pmb_max_live_components": 110,
+        "pmb_assoc_gate_pixels": 56.0,
+        "pmb_min_birth_intensity": 36.0,
+        "min_intensity": 32,
+        "bg_sample_rate": 40,
+        "pruning_threshold": 0.016
+      }
+    }
+  },
+  "night_sky_low_snr": {
+    "description": "Tune for dim low-SNR night-sky clips: lower detection floors, stronger PMB soft births, and conservative non-PMB visibility.",
+    "global": {
+      "bg_threshold": 8
+    },
+    "trackers": {
+      "Advanced baseline": {
+        "min_intensity": 16,
+        "max_distance": 18,
+        "mahalanobis_threshold": 3.1,
+        "min_detection_confidence": 0.26,
+        "min_display_confidence": 0.66
+      },
+      "IMM adaptive": {
+        "min_intensity": 16,
+        "mahalanobis_threshold": 3.3,
+        "max_speed": 76.0,
+        "min_detection_confidence": 0.26,
+        "min_display_confidence": 0.66
+      },
+      "JPDA lite": {
+        "min_intensity": 16,
+        "jpda_margin": 0.28,
+        "jpda_max_soft_neighbors": 1,
+        "min_display_confidence": 0.68
+      },
+      "MHT lite": {
+        "min_intensity": 16,
+        "ambiguity_margin": 0.22,
+        "min_display_confidence": 0.68
+      },
+      "Particle assisted": {
+        "min_intensity": 16,
+        "mahalanobis_threshold": 3.15,
+        "min_display_confidence": 0.68
+      },
+      "Temporal-accumulation TBD (approx)": {
+        "min_intensity": 14,
+        "max_distance": 16,
+        "min_detection_confidence": 0.28,
+        "min_display_confidence": 0.7
+      },
+      "Track-before-detect": {
+        "min_intensity": 18,
+        "existence_threshold": 0.5,
+        "min_display_confidence": 0.74,
+        "tbd_evidence_percentile": 84.0,
+        "tbd_evidence_floor": 1.3
+      },
+      "Current PMB": {
+        "min_intensity": 22,
+        "min_display_confidence": 0.7,
+        "existence_threshold": 0.48
+      },
+      "Textbook PMB": {
+        "min_intensity": 22,
+        "min_display_confidence": 0.5,
+        "existence_threshold": 0.48
+      },
+      "PMB large/fast": {
+        "min_intensity": 18,
+        "max_detection_area": 1400,
+        "existence_threshold": 0.42,
+        "min_display_confidence": 0.58,
+        "lf_bg_threshold_scale": 0.56,
+        "lf_supplement_diff_percentile": 78.0,
+        "lf_supplement_diff_floor": 1.6,
+        "lf_supplement_intensity_relax": 16,
+        "lf_strong_birth_r0": 0.48,
+        "lf_moderate_birth_r0": 0.34,
+        "lf_display_miss_grace": 9
+      }
+    }
+  },
+  "air_to_air": {
+    "description": "Air-to-air passive IR (PMB family): phase translation stabilization + mild CLAHE, higher clutter tolerance and relaxed motion gates for focal-plane air targets.",
+    "kinds": {
+      "pmb": {
+        "a2a_phase_stabilize": true,
+        "a2a_clahe_clip_limit": 2.2,
+        "a2a_clahe_tile_size": 8,
+        "clutter_rate": 8.0,
+        "cluster_eps": 4,
+        "max_detection_area": 1400,
+        "max_acceleration": 45.0,
+        "max_direction_change": 85.0,
+        "max_speed": 420.0,
+        "min_intensity": 20,
+        "bg_threshold": 9,
+        "existence_threshold": 0.46,
+        "min_display_confidence": 0.64
+      }
+    },
+    "trackers": {
+      "Current PMB": {
+        "detection_prob": 0.82,
+        "pruning_threshold": 0.008
+      },
+      "Textbook PMB": {
+        "detection_prob": 0.82,
+        "pruning_threshold": 0.008,
+        "textbook_mahalanobis_gate_sq": 11.34
+      },
+      "Adaptive RFS family": {
+        "max_acceleration": 28.0,
+        "existence_threshold": 0.48
+      },
+      "PMB large/fast": {
+        "max_detection_area": 1800,
+        "lf_bg_threshold_scale": 0.62,
+        "lf_supplement_diff_percentile": 82.0,
+        "lf_display_miss_grace": 8
+      },
+      "Track-before-detect": {
+        "tbd_evidence_percentile": 85.0,
+        "tbd_evidence_floor": 1.4,
+        "tbd_max_proposals_per_frame": 28
+      }
+    }
+  },
+  "compare_target_tracks": {
+    "description": "Comparison preset targeting ~200–500 unique logged tracks on dense parallel_run5-style clips: relax advanced validation, tighten permissive PMB paths, modestly boost conservative PMB baselines.",
+    "global": {
+      "bg_threshold": 9
+    },
+    "trackers": {
+      "Advanced baseline": {
+        "cluster_eps": 6,
+        "min_display_confidence": 0.62,
+        "min_track_length": 7,
+        "min_detection_confidence": 0.26,
+        "max_distance": 26,
+        "mahalanobis_threshold": 3.6,
+        "min_speed": 0.12,
+        "max_speed": 100.0,
+        "max_detection_area": 70,
+        "valid_track_innovation_cap": 28.0,
+        "valid_track_smoothness_floor": 0.3,
+        "valid_track_require_direction_check": true
+      },
+      "IMM adaptive": {
+        "cluster_eps": 6,
+        "min_display_confidence": 0.62,
+        "min_track_length": 7,
+        "min_detection_confidence": 0.26,
+        "max_distance": 26,
+        "mahalanobis_threshold": 3.6,
+        "min_speed": 0.12,
+        "max_speed": 100.0,
+        "max_detection_area": 70,
+        "valid_track_innovation_cap": 28.0,
+        "valid_track_smoothness_floor": 0.3,
+        "valid_track_require_direction_check": true
+      },
+      "JPDA lite": {
+        "cluster_eps": 6,
+        "min_display_confidence": 0.62,
+        "min_track_length": 7,
+        "max_distance": 28,
+        "mahalanobis_threshold": 3.6,
+        "min_speed": 0.12,
+        "max_speed": 100.0,
+        "max_detection_area": 70,
+        "jpda_margin": 0.34,
+        "valid_track_innovation_cap": 28.0,
+        "valid_track_smoothness_floor": 0.3,
+        "valid_track_require_direction_check": true
+      },
+      "MHT lite": {
+        "cluster_eps": 6,
+        "min_display_confidence": 0.62,
+        "min_track_length": 7,
+        "min_speed": 0.12,
+        "max_speed": 100.0,
+        "max_detection_area": 70,
+        "ambiguity_margin": 0.28,
+        "valid_track_innovation_cap": 28.0,
+        "valid_track_smoothness_floor": 0.3,
+        "valid_track_require_direction_check": true
+      },
+      "Particle assisted": {
+        "cluster_eps": 6,
+        "min_display_confidence": 0.62,
+        "min_track_length": 7,
+        "min_speed": 0.12,
+        "max_speed": 100.0,
+        "max_detection_area": 70,
+        "mahalanobis_threshold": 3.6,
+        "valid_track_innovation_cap": 28.0,
+        "valid_track_smoothness_floor": 0.3,
+        "valid_track_require_direction_check": true
+      },
+      "Temporal-accumulation TBD (approx)": {
+        "cluster_eps": 6,
+        "min_display_confidence": 0.58,
+        "min_track_length": 7,
+        "min_detection_confidence": 0.26,
+        "max_distance": 24,
+        "min_speed": 0.12,
+        "max_speed": 100.0,
+        "max_detection_area": 70,
+        "valid_track_innovation_cap": 28.0,
+        "valid_track_smoothness_floor": 0.3,
+        "valid_track_require_direction_check": true
+      },
+      "Current PMB": {
+        "existence_threshold": 0.52,
+        "min_display_confidence": 0.72,
+        "pruning_threshold": 0.011,
+        "min_track_length": 6,
+        "min_intensity": 28
+      },
+      "Textbook PMB": {
+        "existence_threshold": 0.58,
+        "min_display_confidence": 0.72,
+        "min_track_length": 7,
+        "textbook_mahalanobis_gate_sq": 6.76,
+        "pruning_threshold": 0.014
+      },
+      "PMBM": {
+        "existence_threshold": 0.58,
+        "min_display_confidence": 0.72,
+        "min_track_length": 7,
+        "textbook_mahalanobis_gate_sq": 6.76,
+        "pruning_threshold": 0.014,
+        "pmbm_max_hypotheses": 8
+      },
+      "PMB large/fast": {
+        "existence_threshold": 0.58,
+        "min_display_confidence": 0.8,
+        "min_track_length": 6,
+        "pruning_threshold": 0.024,
+        "max_detection_area": 620,
+        "lf_strong_birth_r0": 0.2,
+        "lf_moderate_birth_r0": 0.12,
+        "lf_bg_threshold_scale": 0.8,
+        "lf_supplement_diff_percentile": 91.0,
+        "lf_supplement_diff_floor": 2.4,
+        "lf_display_miss_grace": 4
+      },
+      "PMB sparse (fast)": {
+        "pmb_max_detections_per_frame": 52,
+        "pmb_max_live_components": 85,
+        "pmb_assoc_gate_pixels": 40.0,
+        "pmb_min_birth_intensity": 42.0,
+        "existence_threshold": 0.56,
+        "min_display_confidence": 0.74,
+        "pruning_threshold": 0.022,
+        "min_intensity": 32
+      },
+      "Track-before-detect": {
+        "existence_threshold": 0.46,
+        "min_display_confidence": 0.62,
+        "min_track_length": 4,
+        "tbd_evidence_percentile": 84.0,
+        "tbd_max_proposals_per_frame": 24
+      },
+      "Adaptive RFS family": {
+        "existence_threshold": 0.55,
+        "min_display_confidence": 0.76,
+        "min_track_length": 6,
+        "pruning_threshold": 0.016,
+        "max_acceleration": 16.0
+      }
+    }
+  }
+}

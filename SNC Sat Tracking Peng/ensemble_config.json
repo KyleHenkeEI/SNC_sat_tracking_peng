@@ -1,0 +1,140 @@
+{
+  "description": "6 runs: 3 algs (PMB, Textbook, PMBM) x 2 pools (clear, fast). Conservative — obvious tracks first. Quorum=2 per pool.",
+  "fusion": {
+    "quorum": 2,
+    "spatial_threshold_px": 6.0,
+    "link_threshold_px": 12.0,
+    "pool_overrides": {
+      "fast": {
+        "spatial_threshold_px": 15.0,
+        "link_threshold_px": 50.0
+      }
+    }
+  },
+  "runs": [
+    {
+      "key": "pmb_clear",
+      "tracker_name": "Current PMB",
+      "label": "PMB clear",
+      "pool": "clear",
+      "overrides": {
+        "existence_threshold": 0.55,
+        "min_display_confidence": 0.80,
+        "clutter_rate": 5.0,
+        "min_track_length": 5,
+        "birth_rate": 0.06,
+        "detection_prob": 0.75,
+        "max_speed": 120,
+        "max_acceleration": 15,
+        "max_direction_change": 20,
+        "bg_threshold": 10,
+        "min_intensity": 26
+      }
+    },
+    {
+      "key": "textbook_clear",
+      "tracker_name": "Textbook PMB",
+      "label": "TxtPMB clear",
+      "pool": "clear",
+      "overrides": {
+        "existence_threshold": 0.55,
+        "min_display_confidence": 0.80,
+        "clutter_rate": 5.0,
+        "min_track_length": 5,
+        "textbook_mahalanobis_gate_sq": 9.21,
+        "detection_prob": 0.75,
+        "max_speed": 120,
+        "max_acceleration": 15,
+        "max_direction_change": 20,
+        "bg_threshold": 10,
+        "min_intensity": 26
+      }
+    },
+    {
+      "key": "pmbm_clear",
+      "tracker_name": "PMBM",
+      "label": "PMBM clear",
+      "pool": "clear",
+      "overrides": {
+        "existence_threshold": 0.55,
+        "min_display_confidence": 0.80,
+        "clutter_rate": 5.0,
+        "min_track_length": 5,
+        "detection_prob": 0.75,
+        "pmbm_k_best": 5,
+        "pmbm_max_hypotheses": 10,
+        "max_speed": 120,
+        "max_acceleration": 15,
+        "max_direction_change": 20,
+        "bg_threshold": 10,
+        "min_intensity": 26
+      }
+    },
+    {
+      "key": "pmb_fast",
+      "tracker_name": "Current PMB",
+      "label": "PMB fast",
+      "pool": "fast",
+      "overrides": {
+        "existence_threshold": 0.50,
+        "min_display_confidence": 0.75,
+        "clutter_rate": 5.0,
+        "min_track_length": 5,
+        "birth_rate": 0.06,
+        "detection_prob": 0.75,
+        "process_noise_q": 50.0,
+        "min_association_r": 0.01,
+        "min_speed": 12.0,
+        "max_speed": 350,
+        "max_acceleration": 25,
+        "max_direction_change": 4,
+        "bg_threshold": 10,
+        "min_intensity": 26
+      }
+    },
+    {
+      "key": "textbook_fast",
+      "tracker_name": "Textbook PMB",
+      "label": "TxtPMB fast",
+      "pool": "fast",
+      "overrides": {
+        "existence_threshold": 0.50,
+        "min_display_confidence": 0.75,
+        "clutter_rate": 5.0,
+        "min_track_length": 5,
+        "textbook_mahalanobis_gate_sq": 16.0,
+        "detection_prob": 0.75,
+        "process_noise_q": 50.0,
+        "min_association_r": 0.01,
+        "min_speed": 12.0,
+        "max_speed": 350,
+        "max_acceleration": 25,
+        "max_direction_change": 4,
+        "bg_threshold": 10,
+        "min_intensity": 26
+      }
+    },
+    {
+      "key": "pmbm_fast",
+      "tracker_name": "PMBM",
+      "label": "PMBM fast",
+      "pool": "fast",
+      "overrides": {
+        "existence_threshold": 0.50,
+        "min_display_confidence": 0.75,
+        "clutter_rate": 5.0,
+        "min_track_length": 5,
+        "detection_prob": 0.75,
+        "pmbm_k_best": 5,
+        "pmbm_max_hypotheses": 10,
+        "process_noise_q": 50.0,
+        "min_speed": 12.0,
+        "max_speed": 350,
+        "max_acceleration": 25,
+        "max_direction_change": 4,
+        "bg_threshold": 10,
+        "min_intensity": 26
+      }
+    }
+  ]
+}

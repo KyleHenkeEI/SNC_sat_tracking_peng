@@ -1,0 +1,169 @@
+{
+  "description": "8 runs: 4 advanced algorithms (TBD, Particle, JPDA, MHT) x 2 pools (clear, fast). Tight physical constraints matching the proven PMB ensemble. Quorum=2 per pool.",
+  "fusion": {
+    "quorum": 2,
+    "spatial_threshold_px": 6.0,
+    "link_threshold_px": 12.0,
+    "pool_overrides": {
+      "fast": {
+        "spatial_threshold_px": 15.0,
+        "link_threshold_px": 50.0
+      }
+    }
+  },
+  "runs": [
+    {
+      "key": "tbd_clear",
+      "tracker_name": "Track-before-detect",
+      "label": "TBD clear",
+      "pool": "clear",
+      "overrides": {
+        "existence_threshold": 0.55,
+        "min_display_confidence": 0.80,
+        "clutter_rate": 5.0,
+        "min_track_length": 5,
+        "detection_prob": 0.75,
+        "max_speed": 120,
+        "max_acceleration": 15,
+        "max_direction_change": 20,
+        "bg_threshold": 10,
+        "min_intensity": 26,
+        "tbd_evidence_percentile": 95.0,
+        "tbd_evidence_floor": 2.5,
+        "tbd_peak_min_distance": 10,
+        "tbd_soft_likelihood_gain": 0.85,
+        "tbd_max_proposals_per_frame": 8
+      }
+    },
+    {
+      "key": "particle_clear",
+      "tracker_name": "Particle assisted",
+      "label": "Particle clear",
+      "pool": "clear",
+      "overrides": {
+        "min_display_confidence": 0.80,
+        "min_track_length": 5,
+        "max_speed": 120,
+        "max_acceleration": 15,
+        "max_direction_change": 20,
+        "bg_threshold": 10,
+        "min_intensity": 26,
+        "process_noise": 10.0,
+        "measurement_noise": 2.0,
+        "mahalanobis_threshold": 3.2,
+        "particle_spread": 1.5
+      }
+    },
+    {
+      "key": "jpda_clear",
+      "tracker_name": "JPDA lite",
+      "label": "JPDA clear",
+      "pool": "clear",
+      "overrides": {
+        "min_display_confidence": 0.80,
+        "min_track_length": 5,
+        "max_speed": 120,
+        "max_acceleration": 15,
+        "max_direction_change": 20,
+        "bg_threshold": 10,
+        "min_intensity": 26,
+        "mahalanobis_threshold": 3.2,
+        "max_distance": 22
+      }
+    },
+    {
+      "key": "mht_clear",
+      "tracker_name": "MHT lite",
+      "label": "MHT clear",
+      "pool": "clear",
+      "overrides": {
+        "min_display_confidence": 0.80,
+        "min_track_length": 5,
+        "max_speed": 120,
+        "max_acceleration": 15,
+        "max_direction_change": 20,
+        "bg_threshold": 10,
+        "min_intensity": 26
+      }
+    },
+    {
+      "key": "tbd_fast",
+      "tracker_name": "Track-before-detect",
+      "label": "TBD fast",
+      "pool": "fast",
+      "overrides": {
+        "existence_threshold": 0.50,
+        "min_display_confidence": 0.75,
+        "clutter_rate": 5.0,
+        "min_track_length": 5,
+        "detection_prob": 0.75,
+        "process_noise_q": 50.0,
+        "min_speed": 12.0,
+        "max_speed": 350,
+        "max_acceleration": 25,
+        "max_direction_change": 4,
+        "bg_threshold": 10,
+        "min_intensity": 26,
+        "tbd_evidence_percentile": 93.0,
+        "tbd_evidence_floor": 2.0,
+        "tbd_peak_min_distance": 8,
+        "tbd_soft_likelihood_gain": 0.90,
+        "tbd_max_proposals_per_frame": 10
+      }
+    },
+    {
+      "key": "particle_fast",
+      "tracker_name": "Particle assisted",
+      "label": "Particle fast",
+      "pool": "fast",
+      "overrides": {
+        "min_display_confidence": 0.75,
+        "min_track_length": 5,
+        "process_noise": 12.0,
+        "measurement_noise": 2.0,
+        "min_speed": 12.0,
+        "max_speed": 350,
+        "max_acceleration": 25,
+        "max_direction_change": 4,
+        "bg_threshold": 10,
+        "min_intensity": 26,
+        "mahalanobis_threshold": 3.6,
+        "particle_spread": 1.5
+      }
+    },
+    {
+      "key": "jpda_fast",
+      "tracker_name": "JPDA lite",
+      "label": "JPDA fast",
+      "pool": "fast",
+      "overrides": {
+        "min_display_confidence": 0.75,
+        "min_track_length": 5,
+        "min_speed": 12.0,
+        "max_speed": 350,
+        "max_acceleration": 25,
+        "max_direction_change": 4,
+        "bg_threshold": 10,
+        "min_intensity": 26,
+        "mahalanobis_threshold": 3.6,
+        "max_distance": 30
+      }
+    },
+    {
+      "key": "mht_fast",
+      "tracker_name": "MHT lite",
+      "label": "MHT fast",
+      "pool": "fast",
+      "overrides": {
+        "min_display_confidence": 0.75,
+        "min_track_length": 5,
+        "min_speed": 12.0,
+        "max_speed": 350,
+        "max_acceleration": 25,
+        "max_direction_change": 4,
+        "bg_threshold": 10,
+        "min_intensity": 26
+      }
+    }
+  ]
+}

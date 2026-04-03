@@ -205,3 +205,12 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Generated tracking output (large data / videos)
+SNC Sat Tracking Peng/_nadir_output/*.mp4
+SNC Sat Tracking Peng/_nadir_output/*.png
+SNC Sat Tracking Peng/_nadir_output/*.txt
+SNC Sat Tracking Peng/_sweep_output/
+SNC Sat Tracking Peng/_txtpmb_ensemble/
+SNC Sat Tracking Peng/_txtpmb_fullgrid/
+SNC Sat Tracking Peng/ensamble run/
