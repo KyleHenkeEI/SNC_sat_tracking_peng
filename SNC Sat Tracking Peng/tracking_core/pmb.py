@@ -44,6 +44,7 @@ class BernoulliComponent:
         self.avg_intensity = 0
         self.max_displacement = 0
         self.first_position = state[:2].copy()
+        self.last_raw_measurement = state[:2].copy()
         
         # Kalman filter matrices
         dt = 1.0
@@ -76,6 +77,7 @@ class BernoulliComponent:
     def update(self, measurement, intensity=0):
         """Update with measurement."""
         z = np.array([measurement[0], measurement[1]], dtype=np.float64)
+        self.last_raw_measurement = z.copy()
         
         # Innovation
         y = z - self.H @ self.state
